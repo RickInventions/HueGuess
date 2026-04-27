@@ -4,6 +4,7 @@ import { env } from './config/env.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import gameRoutes from './modules/game/game.routes.js';
+import authRoutes from './modules/auth/auth.routes.js';
 
 const app = express();
 
@@ -13,6 +14,7 @@ app.use(express.json());
 app.use(requestLogger);
 
 // Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/round', gameRoutes);
 
 // Health check
