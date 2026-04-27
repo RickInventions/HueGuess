@@ -1,19 +1,18 @@
 info:
-  name: Login
+  name: Start
   type: http
-  seq: 3
+  seq: 4
 
 http:
   method: POST
-  url: "{{BASE_URL}}auth/login"
+  url: "{{BASE_URL}}round/start"
   body:
     type: json
     data: |-
       {
-        "email": "flashfit121@gmail.com",
-        "password": "Password121"
+        "mode": "casual",
+        "difficulty": "medium"
       }
-  auth: inherit
 
 settings:
   encodeUrl: true
