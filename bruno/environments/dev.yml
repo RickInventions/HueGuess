@@ -1,0 +1,6 @@
+name: dev
+variables:
+  - name: BASE_URL
+    value: http://localhost:3000/api/
+  - secret: true
+    name: USER_1
