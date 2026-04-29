@@ -5,6 +5,7 @@ import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import gameRoutes from './modules/game/game.routes.js';
 import authRoutes from './modules/auth/auth.routes.js';
+import competitiveRoutes from './modules/competitive/competitive.routes.js';
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.use(requestLogger);
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/round', gameRoutes);
+app.use('/api/competitive', competitiveRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

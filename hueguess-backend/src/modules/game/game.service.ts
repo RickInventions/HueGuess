@@ -79,6 +79,14 @@ export function submitAndGetResult(roundId: string, color: HSLColor): RoundResul
   return result;
 }
 
+export function getRound(roundId: string): RoundState | undefined {
+  return activeRounds.get(roundId);
+}
+
+export function cleanupRound(roundId: string): void {
+  activeRounds.delete(roundId);
+}
+
 export function calculateScore(original: HSLColor, user: HSLColor, roundId: string): RoundResult {
   // Normalize values (0–1)
   const deltaH = Math.min(
@@ -123,3 +131,5 @@ function getMemorizationTime(mode: GameMode = 'casual'): number {
 function randomInRange(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
+
+export { activeRounds };

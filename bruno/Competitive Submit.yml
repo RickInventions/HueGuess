@@ -1,0 +1,27 @@
+info:
+  name: Competitive Submit
+  type: http
+  seq: 8
+
+http:
+  method: POST
+  url: "{{BASE_URL}}competitive/submit"
+  body:
+    type: json
+    data: |-
+      {
+          "roundId": "{{ROUND_ID}}",
+          "h": 90,
+          "s": 95,
+          "l": 55,
+          "memorizationTime": 2
+        }
+  auth:
+    type: bearer
+    token: "{{USER_1}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,17 @@
+info:
+  name: Competitive Start
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: "{{BASE_URL}}competitive/start "
+  auth:
+    type: bearer
+    token: "{{USER_1}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

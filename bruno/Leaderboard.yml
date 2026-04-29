@@ -1,0 +1,24 @@
+info:
+  name: Leaderboard
+  type: http
+  seq: 10
+
+http:
+  method: GET
+  url: "{{BASE_URL}}competitive/leaderboard?period=all-time&limit=10"
+  params:
+    - name: period
+      value: all-time
+      type: query
+    - name: limit
+      value: "10"
+      type: query
+  auth:
+    type: bearer
+    token: "{{USER_1}}"
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
