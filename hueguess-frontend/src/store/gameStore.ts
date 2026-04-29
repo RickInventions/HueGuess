@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { HSLColor, SubmitResultResponse } from '@/lib/game';
+import type { HSLColor, RoundResult } from '@/lib/game';
+import { generateColor, calculateScore } from '@/lib/game';
 
 export type GamePhase = 
   | 'idle'
@@ -10,65 +11,68 @@ export type GamePhase =
 
 interface GameState {
   phase: GamePhase;
-  roundId: string | null;
   targetColor: HSLColor | null;
   userColor: HSLColor;
   memorizationTime: number;
   timeRemaining: number;
-  result: SubmitResultResponse | null;
+  result: RoundResult | null;
   
-  // Actions
+  // Actions (client-side, no API)
+  startRound: () => void;
   setPhase: (phase: GamePhase) => void;
-  startMemorizing: (roundId: string, color: HSLColor, time: number) => void;
-  startAdjusting: () => void;
   setUserColor: (color: Partial<HSLColor>) => void;
-  setResult: (result: SubmitResultResponse) => void;
+  submitGuess: () => void;
   reset: () => void;
 }
 
 const defaultUserColor: HSLColor = { h: 180, s: 50, l: 50 };
+const MEMORIZATION_TIME = 2; // seconds for casual
 
-export const useGameStore = create<GameState>((set) => ({
+export const useGameStore = create<GameState>((set, get) => ({
   phase: 'idle',
-  roundId: null,
   targetColor: null,
   userColor: defaultUserColor,
-  memorizationTime: 0,
-  timeRemaining: 0,
+  memorizationTime: MEMORIZATION_TIME,
+  timeRemaining: MEMORIZATION_TIME,
   result: null,
   
+  startRound: () => {
+    const color = generateColor('medium');
+    set({
+      targetColor: color,
+      memorizationTime: MEMORIZATION_TIME,
+      timeRemaining: MEMORIZATION_TIME,
+      phase: 'memorizing',
+      result: null,
+      userColor: defaultUserColor,
+    });
+  },
+  
   setPhase: (phase) => set({ phase }),
-  
-  startMemorizing: (roundId, color, time) => set({
-    roundId,
-    targetColor: color,
-    memorizationTime: time,
-    timeRemaining: time,
-    phase: 'memorizing',
-    result: null,
-  }),
-  
-  startAdjusting: () => set({
-    phase: 'adjusting',
-    userColor: defaultUserColor,
-  }),
   
   setUserColor: (color) => set((state) => ({
     userColor: { ...state.userColor, ...color },
   })),
   
-  setResult: (result) => set({
-    result,
-    phase: 'results',
-  }),
+  submitGuess: () => {
+    const { targetColor, userColor } = get();
+    if (!targetColor) return;
+    
+    set({ phase: 'submitted' });
+    
+    // Small delay for dramatic effect
+    setTimeout(() => {
+      const result = calculateScore(targetColor, userColor);
+      set({ result, phase: 'results' });
+    }, 400);
+  },
   
   reset: () => set({
     phase: 'idle',
-    roundId: null,
     targetColor: null,
     userColor: defaultUserColor,
-    memorizationTime: 0,
-    timeRemaining: 0,
+    memorizationTime: MEMORIZATION_TIME,
+    timeRemaining: MEMORIZATION_TIME,
     result: null,
   }),
 }));

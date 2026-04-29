@@ -1,4 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable react-hooks/refs */
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '@/store/gameStore';
 import { useGameRound } from '@/hooks/useGameRound';
@@ -13,22 +15,36 @@ import { ResultScreen } from './ResultScreen';
 export function GameScreen() {
   const { phase, targetColor, userColor, memorizationTime, result } = useGameStore();
   const { startGame, submitGuess, isSubmitting } = useGameRound();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [showColor, setShowColor] = useState(true);
+  const roundKeyRef = useRef(0);
+  
+  // Reset when phase changes to memorizing (new round)
+  useEffect(() => {
+    if (phase === 'memorizing') {
+      setShowColor(true);
+      roundKeyRef.current += 1;
+    }
+  }, [phase]);
   
   useEffect(() => {
     startGame();
+    setShowColor(true);
+    roundKeyRef.current += 1;
   }, [startGame]);
   
   const handleMemorizeComplete = useCallback(() => {
+    const currentRoundKey = roundKeyRef.current;
     setShowColor(false);
     setTimeout(() => {
-      useGameStore.getState().startAdjusting();
+      // Only switch to adjusting if we're still on the same round
+      if (currentRoundKey === roundKeyRef.current) {
+        useGameStore.getState().setPhase('adjusting');
+      }
     }, 600);
   }, []);
   
   const handleSubmit = () => {
-    submitGuess(userColor.h, userColor.s, userColor.l);
+    submitGuess();
   };
   
   if (phase === 'results' && result) {
@@ -43,9 +59,10 @@ export function GameScreen() {
           <div className="space-y-1.5 sm:space-y-2">
             <div className="flex justify-between text-xs sm:text-sm text-text-muted">
               <span>Memorize this color</span>
-              <span>{Math.ceil(memorizationTime)}s</span>
+              <span>{Math.ceil(memorizationTime+1)}s</span>
             </div>
             <TimerBar
+              key={roundKeyRef.current}
               duration={memorizationTime}
               onComplete={handleMemorizeComplete}
               variant="memorize"
@@ -60,7 +77,7 @@ export function GameScreen() {
         <AnimatePresence mode="wait">
           {(phase === 'memorizing' || phase === 'adjusting') && (
             <motion.div
-              key="target-color"
+              key={`color-${roundKeyRef.current}`}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
@@ -69,7 +86,7 @@ export function GameScreen() {
             >
               {phase === 'memorizing' ? (
                 <>
-                  <ColorDisplay color={targetColor} size="lg" />
+                  <ColorDisplay color={targetColor} size="lg" ghost={!showColor} />
                   <p className="mt-3 sm:mt-4 text-text-muted text-xs sm:text-sm text-center">
                     Remember this color...
                   </p>
