@@ -6,3 +6,5 @@ variables:
     name: USER_1
   - name: ROUND_ID
     value: 43bf1077-b383-4d22-9822-0fc904cdc69d
+  - secret: true
+    name: USER_2
