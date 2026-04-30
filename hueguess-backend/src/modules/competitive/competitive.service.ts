@@ -4,7 +4,7 @@ import { calculateScore } from '../game/game.service.js';
 import type { CompetitiveGameResult, RankTier, LeaderboardEntry, CompetitiveStats, LeaderboardPeriod } from './competitive.types.js';
 
 const BASE_RATING = 1000;
-const K_FACTOR = 32; // How much rating changes per game
+const K_FACTOR = 32;
 
 export async function submitCompetitiveRound(
   userId: string,
@@ -16,26 +16,25 @@ export async function submitCompetitiveRound(
   // Calculate score using same formula
   const scoreResult = calculateScore(originalColor, userColor, roundId);
   
-  // Get current rating
+  // Get current stats
   const [stats] = await sql`
-    SELECT rating, games_played 
+    SELECT rating, games_played, best_score 
     FROM competitive_stats 
     WHERE user_id = ${userId}
   `;
   
-  const currentRating = stats?.rating || BASE_RATING;
-  const gamesPlayed = (stats?.games_played || 0) + 1;
+  const currentRating = stats?.rating ? Number(stats.rating) : BASE_RATING;
+  const gamesPlayed = (stats?.games_played ? Number(stats.games_played) : 0) + 1;
+  const currentBestScore = stats?.best_score ? Number(stats.best_score) : 0;
   
-  // Calculate expected performance (0-1 scale)
+  // Calculate rating change
   const performance = scoreResult.accuracy / 100;
-  
-  // Expected score based on rating vs average (simplified ELO)
-  const expectedPerformance = 0.5; // Using global average as baseline
+  const expectedPerformance = 0.5;
   const ratingChange = Math.round(K_FACTOR * (performance - expectedPerformance) * 10) / 10;
   const newRating = Math.round((currentRating + ratingChange) * 10) / 10;
   
-  // Determine rank tier
   const rankTier = getRankTier(newRating);
+  const newBestScore = Math.max(currentBestScore, scoreResult.accuracy);
   
   // Save game record
   const [game] = await sql`
@@ -51,25 +50,34 @@ export async function submitCompetitiveRound(
     RETURNING id
   `;
   
-  // Update competitive stats
-  await sql`
-    INSERT INTO competitive_stats (user_id, rating, avg_accuracy, games_played, best_score, rank_tier)
-    VALUES (
-      ${userId}, ${newRating}, ${scoreResult.accuracy}, 1, ${scoreResult.accuracy}, ${rankTier}
-    )
-    ON CONFLICT (user_id) 
-    DO UPDATE SET
-      rating = ${newRating},
-      avg_accuracy = (
-        SELECT ROUND(AVG(accuracy)::numeric, 3)
-        FROM games 
-        WHERE user_id = ${userId} AND mode = 'competitive'
-      ),
-      games_played = competitive_stats.games_played + 1,
-      best_score = GREATEST(competitive_stats.best_score, ${scoreResult.accuracy}),
-      rank_tier = ${rankTier},
-      updated_at = NOW()
+  // Calculate new average from all competitive games
+  const [avgResult] = await sql`
+    SELECT ROUND(AVG(accuracy)::numeric, 3) as avg_acc
+    FROM games 
+    WHERE user_id = ${userId} AND mode = 'competitive'
   `;
+  
+  const avgAccuracy = Number(avgResult.avg_acc);
+  
+  // Update or insert competitive stats
+  if (stats) {
+    await sql`
+      UPDATE competitive_stats 
+      SET 
+        rating = ${newRating},
+        avg_accuracy = ${avgAccuracy},
+        games_played = ${gamesPlayed},
+        best_score = ${newBestScore},
+        rank_tier = ${rankTier},
+        updated_at = NOW()
+      WHERE user_id = ${userId}
+    `;
+  } else {
+    await sql`
+      INSERT INTO competitive_stats (user_id, rating, avg_accuracy, games_played, best_score, rank_tier)
+      VALUES (${userId}, ${newRating}, ${avgAccuracy}, ${gamesPlayed}, ${newBestScore}, ${rankTier})
+    `;
+  }
   
   return {
     id: game.id,
@@ -85,17 +93,27 @@ export async function submitCompetitiveRound(
 }
 
 export async function getLeaderboard(period: LeaderboardPeriod = 'all-time', limit: number = 100): Promise<LeaderboardEntry[]> {
-  let dateFilter = '';
+  let dateFilter;
   
   switch (period) {
     case 'daily':
-      dateFilter = `AND g.created_at >= NOW() - INTERVAL '1 day'`;
+      dateFilter = sql`AND EXISTS (
+        SELECT 1 FROM games g 
+        WHERE g.user_id = cs.user_id 
+        AND g.mode = 'competitive'
+        AND g.created_at >= NOW() - INTERVAL '1 day'
+      )`;
       break;
     case 'weekly':
-      dateFilter = `AND g.created_at >= NOW() - INTERVAL '7 days'`;
+      dateFilter = sql`AND EXISTS (
+        SELECT 1 FROM games g 
+        WHERE g.user_id = cs.user_id 
+        AND g.mode = 'competitive'
+        AND g.created_at >= NOW() - INTERVAL '7 days'
+      )`;
       break;
     default:
-      dateFilter = '';
+      dateFilter = sql``;
   }
   
   const entries = await sql`
@@ -110,12 +128,7 @@ export async function getLeaderboard(period: LeaderboardPeriod = 'all-time', lim
       FROM users u
       JOIN competitive_stats cs ON cs.user_id = u.id
       WHERE cs.games_played > 0
-      ${dateFilter ? sql`AND EXISTS (
-        SELECT 1 FROM games g 
-        WHERE g.user_id = u.id 
-        AND g.mode = 'competitive'
-        ${sql.unsafe(dateFilter)}
-      )` : sql``}
+      ${dateFilter}
     )
     SELECT 
       ROW_NUMBER() OVER (ORDER BY rating DESC) as rank,
