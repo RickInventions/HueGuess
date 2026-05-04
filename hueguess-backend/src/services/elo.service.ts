@@ -276,4 +276,67 @@ export class EloService {
       ratingHistory: ratingHistory.rows,
     };
   }
+
+  /**
+ * Apply rating decay for inactive players (opt-in, not automatic)
+ * Called when a player returns after >7 days inactivity
+ */
+static async applyDecayIfNeeded(userId: string): Promise<{ decayed: boolean; ratingLost: number }> {
+  const result = await query(
+    `SELECT rating, last_game_at FROM competitive_stats WHERE user_id = $1`,
+    [userId]
+  );
+  
+  if (result.rows.length === 0) {
+    return { decayed: false, ratingLost: 0 };
+  }
+  
+  const { rating, last_game_at } = result.rows[0];
+  
+  if (!last_game_at) {
+    return { decayed: false, ratingLost: 0 };
+  }
+  
+  const daysSinceLastGame = (Date.now() - new Date(last_game_at).getTime()) / (1000 * 60 * 60 * 24);
+  
+  // Only decay after 7 days of inactivity
+  if (daysSinceLastGame < 7) {
+    return { decayed: false, ratingLost: 0 };
+  }
+  
+  // Decay: lose 5 rating per week of inactivity, max 50
+  const weeksInactive = Math.floor(daysSinceLastGame / 7);
+  const ratingLoss = Math.min(50, weeksInactive * 5);
+  const newRating = Math.max(0, rating - ratingLoss);
+  
+  await query(
+    `UPDATE competitive_stats SET rating = $1, updated_at = NOW() WHERE user_id = $2`,
+    [newRating, userId]
+  );
+  
+  return { decayed: true, ratingLost: ratingLoss };
+}
+
+/**
+ * Get top players by tier (for display)
+ */
+static async getTopPlayersByTier(limit: number = 3): Promise<Record<RankTier, any[]>> {
+  const tiers: RankTier[] = ['Diamond', 'Platinum', 'Gold', 'Silver', 'Bronze'];
+  const result: Record<string, any[]> = {};
+  
+  for (const tier of tiers) {
+    const players = await query(
+      `SELECT u.username, cs.rating, cs.games_played, cs.avg_accuracy
+       FROM competitive_stats cs
+       JOIN users u ON cs.user_id = u.id
+       WHERE cs.rank_tier = $1 AND cs.games_played > 0
+       ORDER BY cs.rating DESC
+       LIMIT $2`,
+      [tier, limit]
+    );
+    result[tier] = players.rows;
+  }
+  
+  return result as Record<RankTier, any[]>;
+}
 }

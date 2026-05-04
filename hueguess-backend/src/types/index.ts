@@ -100,3 +100,45 @@ export interface DifficultyGate {
   unlockedDifficulties: string[];
   message?: string;
 }
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface LeaderboardFilters {
+  period: 'daily' | 'weekly' | 'all-time';
+  page?: number;
+  limit?: number;
+  rankTier?: RankTier;
+  search?: string;
+}
+
+export interface RateLimitConfig {
+  windowMs: number;
+  maxRequests: number;
+}
+
+export interface PlayerRankResponse {
+  rank: number;
+  totalPlayers: number;
+  percentile: number;
+  nextTierProgress: {
+    currentTier: RankTier;
+    nextTier: RankTier | null;
+    ratingNeeded: number;
+    progressPercent: number;
+  };
+}
+
+export interface GlobalStats {
+  totalPlayers: number;
+  totalGames: number;
+  averageAccuracy: number;
+  distributionByTier: Record<RankTier, number>;
+}

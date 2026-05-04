@@ -1,18 +1,11 @@
 info:
   name: Leaderboard
   type: http
-  seq: 12
+  seq: 13
 
 http:
   method: GET
-  url: "{{BASE_URL}}competitive/leaderboard?period=all-time&limit=10"
-  params:
-    - name: period
-      value: all-time
-      type: query
-    - name: limit
-      value: "10"
-      type: query
+  url: "{{BASE_URL}}leaderboard/top-players"
   auth:
     type: bearer
     token: "{{USER_1}}"
