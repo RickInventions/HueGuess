@@ -54,3 +54,49 @@ export interface AuthPayload {
   userId: string;
   username: string;
 }
+
+export interface CompetitiveStats {
+  user_id: string;
+  rating: number;
+  rank_tier: RankTier;
+  games_played: number;
+  games_won: number;
+  total_accuracy: number;
+  avg_accuracy: number;
+  best_score: number;
+  current_streak: number;
+  best_streak: number;
+  last_game_at: Date | null;
+}
+
+export type RankTier = 'Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'Diamond';
+
+export interface RatingChange {
+  ratingBefore: number;
+  ratingAfter: number;
+  ratingChange: number;
+  newTier: RankTier;
+  tierChanged: boolean;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  username: string;
+  rating: number;
+  rankTier: RankTier;
+  gamesPlayed: number;
+  avgAccuracy: number;
+  bestScore: number;
+}
+
+export interface LeaderboardResponse {
+  leaderboard: LeaderboardEntry[];
+  period: 'daily' | 'weekly' | 'all-time';
+  timestamp: string;
+}
+
+export interface DifficultyGate {
+  allowed: boolean;
+  unlockedDifficulties: string[];
+  message?: string;
+}

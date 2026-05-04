@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { GameService } from '../services/game.service.js';
-import { optionalAuth, requireAuth } from '../middleware/auth.middleware.js';
+import { EloService } from '../services/elo.service.js';
+import { optionalAuth, requireAuth, requireVerified } from '../middleware/auth.middleware.js';
 import type { AuthRequest } from '../middleware/auth.middleware.js';
 
 const router = Router();
@@ -17,17 +18,40 @@ router.post('/round', optionalAuth, async (req: AuthRequest, res) => {
       difficulty = 'casual';
     }
 
-    // Validate difficulty
-    const validDifficulties = ['easy', 'medium', 'hard', 'casual'];
-    if (!validDifficulties.includes(difficulty)) {
-      res.status(400).json({ error: `Invalid difficulty. Must be one of: ${validDifficulties.join(', ')}` });
-      return;
-    }
+    // For competitive, require auth + verified email
+    if (mode === 'competitive') {
+      if (!req.userId) {
+        res.status(401).json({ error: 'Authentication required for competitive mode' });
+        return;
+      }
 
-    // For competitive, require auth
-    if (mode === 'competitive' && !req.userId) {
-      res.status(401).json({ error: 'Authentication required for competitive mode' });
-      return;
+      // Check email verification
+      const { query: dbQuery } = await import('../config/db.js');
+      const userResult = await dbQuery('SELECT is_verified FROM users WHERE id = $1', [req.userId]);
+      
+      if (userResult.rows.length === 0 || !userResult.rows[0].is_verified) {
+        res.status(403).json({
+          error: 'Email verification required',
+          message: 'Please verify your email to play competitive mode'
+        });
+        return;
+      }
+
+      // Check difficulty gating
+      const stats = await EloService.getOrCreateStats(req.userId);
+      const gate = EloService.canPlayDifficulty(stats.rank_tier, difficulty);
+      
+      if (!gate.allowed) {
+        res.status(403).json({
+          error: 'Difficulty locked',
+          message: gate.message,
+          unlockedDifficulties: gate.unlockedDifficulties,
+          currentTier: stats.rank_tier,
+        });
+        return;
+      }
+
+      difficulty = difficulty as 'easy' | 'medium' | 'hard';
     }
 
     const difficultyKey = difficulty as 'easy' | 'medium' | 'hard' | 'casual';
@@ -75,7 +99,31 @@ router.post('/submit', optionalAuth, async (req: AuthRequest, res) => {
       req.userId || null
     );
 
-    res.json(result);
+    // If competitive mode, update ELO
+    let ratingChange = null;
+    if (req.userId && result.score !== undefined) {
+      // Determine difficulty from round
+      const { query } = await import('../config/db.js');
+      const roundResult = await query(
+        'SELECT mode, difficulty FROM game_rounds WHERE id = $1',
+        [roundId]
+      );
+
+      if (roundResult.rows[0]?.mode === 'competitive' && roundResult.rows[0]?.difficulty) {
+        ratingChange = await EloService.updateStatsAfterGame(
+          req.userId,
+          result.accuracy,
+          result.score,
+          roundResult.rows[0].difficulty,
+          roundId
+        );
+      }
+    }
+
+    res.json({
+      ...result,
+      ratingChange: ratingChange || undefined,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to submit round';
     

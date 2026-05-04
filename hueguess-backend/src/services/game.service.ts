@@ -18,27 +18,23 @@ export class GameService {
     let h: number, s: number, l: number;
 
     if (difficulty === 'casual' || difficulty === 'easy') {
-      h = Math.random() * 360;
-      s = 60 + Math.random() * 40;  // 60–100
-      l = 40 + Math.random() * 30;  // 40–70
+      h = Math.floor(Math.random() * 360);           // 0–359
+      s = Math.floor(60 + Math.random() * 41);       // 60–100
+      l = Math.floor(40 + Math.random() * 31);       // 40–70
     } else if (difficulty === 'medium') {
-      h = Math.random() * 360;
-      s = 50 + Math.random() * 50;  // 50–100
-      l = 35 + Math.random() * 35;  // 35–70
+      h = Math.floor(Math.random() * 360);           // 0–359
+      s = Math.floor(50 + Math.random() * 51);       // 50–100
+      l = Math.floor(35 + Math.random() * 36);       // 35–70
     } else { // hard
-      h = Math.random() * 360;
-      s = 30 + Math.random() * 60;  // 30–90 (more muted possible)
-      l = 30 + Math.random() * 40;  // 30–70
+      h = Math.floor(Math.random() * 360);           // 0–359
+      s = Math.floor(30 + Math.random() * 61);       // 30–90
+      l = Math.floor(30 + Math.random() * 41);       // 30–70
     }
 
-    return {
-      h: Math.round(h * 100) / 100,
-      s: Math.round(s * 100) / 100,
-      l: Math.round(l * 100) / 100,
-    };
+    return { h, s, l };
   }
 
-  static async createRound(
+ static async createRound(
     userId: string | null,
     difficulty: 'easy' | 'medium' | 'hard' | 'casual' = 'medium'
   ): Promise<RoundResponse> {
@@ -69,7 +65,7 @@ export class GameService {
 
     return {
       roundId: row.id,
-      color,
+      color,                                          // { h: 92, s: 91, l: 62 }
       memorizationSeconds: config.memorizationSeconds,
       difficulty: difficulty === 'casual' ? undefined : difficulty,
       generatedAt: row.round_created_at.toISOString(),

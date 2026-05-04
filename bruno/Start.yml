@@ -5,14 +5,17 @@ info:
 
 http:
   method: POST
-  url: "{{BASE_URL}}round/start"
-  body:
-    type: json
-    data: |-
-      {
-        "mode": "casual",
-        "difficulty": "medium"
-      }
+  url: "{{BASE_URL}}game/round?mode=competitive&difficulty=medium"
+  params:
+    - name: mode
+      value: competitive
+      type: query
+    - name: difficulty
+      value: medium
+      type: query
+  auth:
+    type: bearer
+    token: "{{USER_1}}"
 
 settings:
   encodeUrl: true

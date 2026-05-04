@@ -5,6 +5,6 @@ variables:
   - secret: true
     name: USER_1
   - name: ROUND_ID
-    value: c4e5214c-3987-4a3b-9b3a-5d5dae4702fc
+    value: 8fbbdc5d-4d44-4472-ab1e-af994b0b8164
   - secret: true
     name: USER_2

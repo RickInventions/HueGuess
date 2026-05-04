@@ -5,16 +5,21 @@ info:
 
 http:
   method: POST
-  url: "{{BASE_URL}}round/submit"
+  url: "{{BASE_URL}}game/submit"
   body:
     type: json
     data: |-
       {
         "roundId": "{{ROUND_ID}}",
-            "h": 49,
-            "s": 61,
-            "l": 42
+        "userColor":{
+          "h":91,
+          "s":91,
+          "l":62
+        }
       }
+  auth:
+    type: bearer
+    token: "{{USER_1}}"
 
 settings:
   encodeUrl: true
