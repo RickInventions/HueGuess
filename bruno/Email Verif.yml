@@ -1,19 +1,17 @@
 info:
-  name: Submit
+  name: Email Verif
   type: http
-  seq: 7
+  seq: 4
 
 http:
   method: POST
-  url: "{{BASE_URL}}round/submit"
+  url: "{{BASE_URL}}auth/verify-email"
   body:
     type: json
     data: |-
       {
-        "roundId": "{{ROUND_ID}}",
-            "h": 49,
-            "s": 61,
-            "l": 42
+        "email": "flashfit121@gmail.com",
+        "code": "430654"
       }
 
 settings:

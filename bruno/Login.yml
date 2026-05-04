@@ -1,7 +1,7 @@
 info:
   name: Login
   type: http
-  seq: 3
+  seq: 5
 
 http:
   method: POST
@@ -13,7 +13,6 @@ http:
         "email": "flashfit121@gmail.com",
         "password": "Password121"
       }
-  auth: inherit
 
 settings:
   encodeUrl: true

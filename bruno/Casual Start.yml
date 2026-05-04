@@ -1,0 +1,18 @@
+info:
+  name: Casual Start
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{BASE_URL}}game/round?mode=casual"
+  params:
+    - name: mode
+      value: casual
+      type: query
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

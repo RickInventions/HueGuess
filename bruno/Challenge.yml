@@ -1,7 +1,7 @@
 info:
   name: Challenge
   type: websocket
-  seq: 11
+  seq: 13
 
 websocket:
   url: ws://localhost:3000?token={{USER_2}}
