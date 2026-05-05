@@ -13,6 +13,19 @@ const RANK_THRESHOLDS: { tier: RankTier; minRating: number }[] = [
   { tier: 'Diamond', minRating: 750 },
 ];
 
+const NEG_THRESHOLDS: Record<string, number> = {
+  easy: 60,    // Below 60% = forced negative
+  medium: 70,  // Below 70% = forced negative
+  hard: 88,    // Below 88% = forced negative
+};
+
+// ─── DIFFICULTY K-FACTOR MULTIPLIERS ────
+const DIFFICULTY_K_MULTIPLIERS: Record<string, number> = {
+  easy: 1.5,
+  medium: 1.0,
+  hard: 3.0,
+};
+
 export class EloService {
   /**
    * Calculate ELO rating change based on accuracy vs expected performance
@@ -22,40 +35,89 @@ export class EloService {
    * - 500 rating = expected ~75% accuracy
    * - 1000 rating = expected ~90% accuracy
    */
-  static calculateRatingChange(
-    currentRating: number,
-    accuracy: number,
-    difficulty: 'easy' | 'medium' | 'hard'
-  ): { ratingChange: number; expectedAccuracy: number } {
-    // Expected accuracy scales with rating (sigmoid-like)
-    const expectedAccuracy = this.getExpectedAccuracy(currentRating);
+static calculateRatingChange(
+  currentRating: number,
+  accuracy: number,
+  difficulty: 'easy' | 'medium' | 'hard'
+): { ratingChange: number; expectedAccuracy: number; isNegPenalty: boolean } {
+  
+  const negThreshold = NEG_THRESHOLDS[difficulty];
+  const expectedAccuracy = this.getExpectedAccuracy(currentRating);
+
+  // ─── PATH A: BELOW NEG THRESHOLD (FORCED LOSS) ───
+  if (accuracy < negThreshold) {
     
-    // Performance delta: how much better/worse than expected
-    const performanceDelta = accuracy - expectedAccuracy;
+    // How far below the threshold (as a ratio)
+    // e.g., Hard threshold=88, accuracy=69.74 → belowBy=18.26
+    const belowBy = negThreshold - accuracy;
     
-    // K-factor adjustments
+    // Penalty scales with how badly they missed
+    // At exactly threshold-1: multiplier ≈ 1.01
+    // At 0% accuracy: multiplier = 2.0 (double penalty)
+    const penaltyMultiplier = 1 + (belowBy / negThreshold);
+    
+    // Base K-factor
     let kFactor = BASE_K;
     
-    // Higher volatility for new players (fewer games = bigger swings)
-    // We'll pass gamesPlayed optionally, but for now apply difficulty scaling
-    if (difficulty === 'hard') {
-      kFactor *= 1.2; // Bigger swings on hard mode
-    } else if (difficulty === 'easy') {
-      kFactor *= 0.8; // Smaller swings on easy mode
+    // Difficulty multiplier from the rules
+    // Easy=1.5x, Medium=1.0x, Hard=3.0x
+    const diffMult = DIFFICULTY_K_MULTIPLIERS[difficulty] || 1.0;
+    kFactor *= diffMult;
+    
+    // Calculate raw loss
+    // The worse you do, the bigger the penalty
+    let ratingChange = Math.round(-kFactor * penaltyMultiplier);
+    
+    // Hard cap: can't lose more than 150 in a single game
+    if (ratingChange < -150) {
+      ratingChange = -150;
     }
     
-    // Rating floor: can't go below 0
-    let ratingChange = Math.round(kFactor * (performanceDelta / 100));
-    
+    // Floor: can't go below 0 Huepoints
     if (currentRating + ratingChange < 0) {
-      ratingChange = -currentRating; // Clamp to floor of 0
+      ratingChange = -currentRating;
     }
-    
+
     return {
       ratingChange,
       expectedAccuracy: Math.round(expectedAccuracy * 100) / 100,
+      isNegPenalty: true,
     };
   }
+
+  // ─── PATH B: AT/ABOVE NEG THRESHOLD (NORMAL ELO) ───
+  
+  // Performance delta: how much better/worse than expected
+  const performanceDelta = accuracy - expectedAccuracy;
+  
+  // K-factor with difficulty scaling
+  let kFactor = BASE_K;
+  
+  if (difficulty === 'hard') {
+    kFactor *= 1.2;  // Bigger swings on hard mode (but only for wins)
+  } else if (difficulty === 'easy') {
+    kFactor *= 0.8;  // Smaller swings on easy mode
+  }
+  
+  // Calculate rating change
+  // Positive delta = gain, negative delta = loss
+  let ratingChange = Math.round(kFactor * (performanceDelta / 100));
+  
+  // Even above threshold, if delta is negative, player can lose rating
+  // (e.g., expected 75% but only got 71% on medium — small loss)
+  // This is normal ELO behavior
+  
+  // Floor at 0
+  if (currentRating + ratingChange < 0) {
+    ratingChange = -currentRating;
+  }
+  
+  return {
+    ratingChange,
+    expectedAccuracy: Math.round(expectedAccuracy * 100) / 100,
+    isNegPenalty: false,
+  };
+}
 
   /**
    * Get expected accuracy for a given rating
