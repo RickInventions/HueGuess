@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Coffee, Swords, ArrowRight } from 'lucide-react'
+import { Coffee, Swords, ArrowRight, Trophy } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { Card } from '../components/ui/Card'
 
@@ -68,6 +68,24 @@ export default function Home() {
                   <p className="text-muted text-sm">
                     {user ? 'Climb the leaderboard.' : 'Sign in to compete.'}
                   </p>
+                </div>
+              </div>
+              <ArrowRight className="w-5 h-5 text-muted group-hover:text-deep transition-colors" />
+            </div>
+          </Card>
+        </Link>
+
+        {/* Leaderboard */}
+        <Link to="/leaderboard" className="block no-drag">
+          <Card hover className="group border-l-4 border-l-yellow-400/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-yellow-400/10 flex items-center justify-center">
+                  <Trophy className="w-6 h-6 text-yellow-500" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-semibold text-lg">Leaderboard</h3>
+                  <p className="text-muted text-sm">See the top players.</p>
                 </div>
               </div>
               <ArrowRight className="w-5 h-5 text-muted group-hover:text-deep transition-colors" />

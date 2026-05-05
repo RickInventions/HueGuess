@@ -6,6 +6,7 @@ import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import VerifyEmail from './pages/VerifyEmail'
+import Game from './pages/Game'
 import Stats from './pages/Stats'
 import Leaderboard from './pages/Leaderboard'
 
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/verify" element={<VerifyEmail />} />
+          <Route path="/play" element={<Game />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
         </Routes>
