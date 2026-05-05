@@ -9,118 +9,106 @@ export class EmailService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  static async sendVerificationEmail(
-    toEmail: string,
-    verificationCode: string,
-    username: string
-  ): Promise<void> {
-    const subject = 'Verify Your HueGuess Account';
+static async sendVerificationEmail(
+  toEmail: string,
+  verificationCode: string,
+  username: string
+): Promise<void> {
+  const subject = 'Verify Your HueGuess Account';
+  const verificationLink = `${FRONTEND_URL}/verify?code=${verificationCode}&email=${encodeURIComponent(toEmail)}`;
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-            line-height: 1.6; 
-            color: #333; 
-            max-width: 600px; 
-            margin: 0 auto; 
-            padding: 20px; 
-          }
-          .header { 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-            color: white; 
-            padding: 30px; 
-            text-align: center; 
-            border-radius: 8px 8px 0 0; 
-          }
-          .color-icon {
-            font-size: 48px;
-            margin-bottom: 15px;
-          }
-          .content { 
-            background: #f8f9fa; 
-            padding: 30px; 
-            border-radius: 0 0 8px 8px; 
-          }
-          .code-container { 
-            background: white; 
-            border: 2px dashed #ddd; 
-            padding: 25px; 
-            text-align: center; 
-            margin: 25px 0; 
-            border-radius: 8px; 
-            font-family: monospace; 
-          }
-          .verification-code { 
-            font-size: 32px; 
-            letter-spacing: 8px; 
-            color: #667eea; 
-            font-weight: bold; 
-            margin: 10px 0; 
-          }
-          .expiry-note { 
-            color: #666; 
-            font-size: 14px; 
-            margin-top: 10px; 
-          }
-          .cta-button {
-            display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 12px 30px;
-            text-decoration: none;
-            border-radius: 4px;
-            margin: 20px 0;
-          }
-          .footer { 
-            text-align: center; 
-            margin-top: 30px; 
-            padding-top: 20px; 
-            border-top: 1px solid #ddd; 
-            color: #666; 
-            font-size: 12px; 
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div class="color-icon">🎨</div>
-          <h1 style="margin: 0; font-weight: 300;">HueGuess</h1>
-          <p style="margin: 5px 0 0 0; opacity: 0.8;">Can you remember the color?</p>
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body { 
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+          line-height: 1.6; 
+          color: #333; 
+          max-width: 600px; 
+          margin: 0 auto; 
+          padding: 20px; 
+        }
+        .header { 
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+          color: white; 
+          padding: 30px; 
+          text-align: center; 
+          border-radius: 8px 8px 0 0; 
+        }
+        .color-icon {
+          font-size: 48px;
+          margin-bottom: 15px;
+        }
+        .content { 
+          background: #f8f9fa; 
+          padding: 30px; 
+          border-radius: 0 0 8px 8px; 
+        }
+        .cta-button {
+          display: inline-block;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          color: white;
+          padding: 14px 36px;
+          text-decoration: none;
+          border-radius: 18px;
+          margin: 24px 0;
+          font-size: 16px;
+          font-weight: 600;
+        }
+        .divider {
+          border-top: 1px solid #ddd;
+          margin: 24px 0;
+        }
+        .footer { 
+          text-align: center; 
+          margin-top: 30px; 
+          padding-top: 20px; 
+          border-top: 1px solid #ddd; 
+          color: #666; 
+          font-size: 12px; 
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div class="color-icon">🎨</div>
+        <h1 style="margin: 0; font-weight: 300;">HueGuess</h1>
+        <p style="margin: 5px 0 0 0; opacity: 0.8;">Can you remember the color?</p>
+      </div>
+      <div class="content">
+        <p>Hello <strong>${username}</strong>,</p>
+        <p>Welcome to HueGuess! Click the button below to verify your email and unlock Competitive Mode — including leaderboards, ranked tiers, and multiplayer challenges.</p>
+        
+        <p style="text-align: center;">
+          <a href="${verificationLink}" class="cta-button">
+            Verify Email Address
+          </a>
+        </p>
+        
+        <div class="divider"></div>
+        
+        <p style="font-size: 14px; color: #666;">
+          Or copy this link into your browser:<br>
+          <a href="${verificationLink}" style="color: #667eea; word-break: break-all;">${verificationLink}</a>
+        </p>
+        
+        <p style="font-size: 13px; color: #999;">This link expires in 15 minutes.</p>
+        
+        <p><em>Why verify?</em> A verified account ensures fair leaderboard rankings and prevents duplicate accounts in Competitive Mode.</p>
+        
+        <p>If you didn't create an account with HueGuess, you can safely ignore this email.</p>
+        
+        <div class="footer">
+          <p>🎨 HueGuess — Train your color memory</p>
+          <p>This is an automated message, please do not reply</p>
         </div>
-        <div class="content">
-          <p>Hello <strong>${username}</strong>,</p>
-          <p>Welcome to HueGuess! To access Competitive Mode and climb the leaderboards, please verify your email address using this 6-digit code:</p>
-          
-          <div class="code-container">
-            <div class="verification-code">${verificationCode}</div>
-            <p class="expiry-note">This code expires in 15 minutes</p>
-          </div>
-          
-          <p>Enter this code on the verification page to activate your competitive account.</p>
-          
-          <p style="text-align: center;">
-            <a href="${FRONTEND_URL}/verify?code=${verificationCode}&email=${encodeURIComponent(toEmail)}" class="cta-button">
-              Verify Email Address
-            </a>
-          </p>
-          
-          <p><em>Why verify?</em> Email verification is required for Competitive Mode to ensure fair leaderboard rankings and prevent duplicate accounts.</p>
-          
-          <p>If you didn't create an account with HueGuess, you can safely ignore this email.</p>
-          
-          <div class="footer">
-            <p>🎨 HueGuess — Train your color memory</p>
-            <p>This is an automated message, please do not reply</p>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
+      </div>
+    </body>
+    </html>
+  `;
 
     const textContent = `
       HueGuess Account Verification
