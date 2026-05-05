@@ -7,7 +7,7 @@ interface ColorSlidersProps {
   disabled?: boolean
 }
 
-export function ColorSliders({ color, onChange, disabled = false }: ColorSlidersProps) {
+export function ColorSliders({ color, onChange }: ColorSlidersProps) {
   return (
     <div className="space-y-5 w-full">
       {/* Preview block — the color the user is building */}
