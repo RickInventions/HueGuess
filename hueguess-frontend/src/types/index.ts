@@ -107,3 +107,41 @@ export interface ApiError {
   error: string
   message?: string
 }
+
+// ─── Multiplayer ─────────────────────────
+export interface MultiplayerConfig {
+  roundDuration: number    // 15-30
+  colorDuration: number    // 0.5-7
+}
+
+export interface RoomPlayer {
+  socketId: string
+  userId: string | null
+  username: string
+  isReady: boolean
+  isHost: boolean
+  connected: boolean
+}
+
+export interface MultiplayerRoom {
+  code: string
+  config: MultiplayerConfig
+  players: RoomPlayer[]
+  hostSocketId: string
+  status: 'waiting' | 'countdown' | 'playing' | 'round_ended'
+}
+
+export interface RoundResult {
+  username: string
+  accuracy: number
+  score: number
+  originalColor: ColorHSL
+  userColor: ColorHSL
+  submitted: boolean
+}
+
+export interface LeaderboardEntry {
+  username: string
+  avgAccuracy: number
+  roundsPlayed: number
+}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
 interface UseTimerProps {
-  duration: number // total seconds
+  duration: number
   onExpire?: () => void
   autoStart?: boolean
 }
@@ -11,11 +11,15 @@ export function useTimer({ duration, onExpire, autoStart = true }: UseTimerProps
   const [isRunning, setIsRunning] = useState(autoStart)
   const [isExpired, setIsExpired] = useState(false)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const onExpireRef = useRef(onExpire)
+
+  // Keep onExpire ref updated
+  onExpireRef.current = onExpire
 
   const start = useCallback(() => {
+    setTimeLeft(duration)
     setIsRunning(true)
     setIsExpired(false)
-    setTimeLeft(duration)
   }, [duration])
 
   const stop = useCallback(() => {
@@ -32,6 +36,12 @@ export function useTimer({ duration, onExpire, autoStart = true }: UseTimerProps
     setIsExpired(false)
   }, [duration, stop])
 
+  // Reset when duration changes
+  useEffect(() => {
+    setTimeLeft(duration)
+    setIsExpired(false)
+  }, [duration])
+
   useEffect(() => {
     if (!isRunning) return
 
@@ -41,7 +51,8 @@ export function useTimer({ duration, onExpire, autoStart = true }: UseTimerProps
           clearInterval(intervalRef.current!)
           setIsRunning(false)
           setIsExpired(true)
-          onExpire?.()
+          // 🔥 Call onExpire
+          onExpireRef.current?.()
           return 0
         }
         return prev - 0.1
@@ -53,9 +64,18 @@ export function useTimer({ duration, onExpire, autoStart = true }: UseTimerProps
         clearInterval(intervalRef.current)
       }
     }
-  }, [isRunning, onExpire])
+  }, [isRunning])
 
-  const percentage = (timeLeft / duration) * 100
+  // Restart when autoStart changes to true
+  useEffect(() => {
+    if (autoStart) {
+      start()
+    } else {
+      stop()
+    }
+  }, [autoStart]) // eslint-disable-line
+
+  const percentage = duration > 0 ? (timeLeft / duration) * 100 : 0
 
   return { timeLeft, isRunning, isExpired, percentage, start, stop, reset }
 }

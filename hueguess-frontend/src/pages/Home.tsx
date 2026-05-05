@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Coffee, Swords, ArrowRight, Trophy, User } from 'lucide-react'
+import { Coffee, Swords, ArrowRight, Trophy, User, Users } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { Card } from '../components/ui/Card'
 
@@ -67,6 +67,30 @@ export default function Home() {
                   <h3 className="font-heading font-semibold">Competitive</h3>
                   <p className="text-muted text-sm">
                     {user ? 'Climb the leaderboard.' : 'Sign in to compete.'}
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="w-5 h-5 text-muted group-hover:text-deep transition-colors" />
+            </div>
+          </Card>
+        </Link>
+        
+        <Link
+          to={user ? '/challenge' : '/login?redirect=/challenge'}
+          className="block no-drag"
+        >
+          <Card hover className="group border-l-4 border-l-purple-400/30">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-11 h-11 rounded-2xl bg-purple-400/10 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-purple-500" />
+                </div>
+                <div>
+                  <h3 className="font-heading font-semibold">Challenge</h3>
+                  <p className="text-muted text-sm">
+                    {user 
+                      ? 'Play with friends in real-time.' 
+                      : 'Sign in to play with friends.'}
                   </p>
                 </div>
               </div>

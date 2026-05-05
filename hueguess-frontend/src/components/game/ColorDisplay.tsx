@@ -27,16 +27,6 @@ export function ColorDisplay({ color, visible, size = 'lg' }: ColorDisplayProps)
             className="w-full h-full rounded-2xl shadow-card"
             style={{ backgroundColor: hslString(color) }}
           />
-        ) : color ? (
-          <motion.div
-            key="color-hidden"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="w-full h-full rounded-2xl shadow-card border-2 border-dashed border-border flex items-center justify-center"
-            style={{ backgroundColor: '#F1EEE7' }}
-          >
-            <span className="text-muted text-sm font-medium">Color hidden</span>
-          </motion.div>
         ) : (
           <motion.div
             key="color-loading"
