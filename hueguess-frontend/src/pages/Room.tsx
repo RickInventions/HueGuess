@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Clock, ArrowLeft } from 'lucide-react'
+import { Send, Clock } from 'lucide-react'
 import { useMultiplayer } from '../hooks/useMultiplayer'
 import { ColorSliders } from '../components/game/ColorSliders'
 import { TimerBar } from '../components/game/TimerBar'

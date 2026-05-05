@@ -25,7 +25,7 @@ export default function Challenge() {
   const [creating, setCreating] = useState(false)
   const [joining, setJoining] = useState(false)
   const [copied, setCopied] = useState(false)
-
+const [error, setError] = useState<string | null>(null)
   // 🔥 FIX: Navigate IMMEDIATELY when game phase changes to playing/round_ended
   // Use a ref to track if we've already navigated to avoid loops
   const [navigated, setNavigated] = useState(false)
@@ -53,6 +53,17 @@ export default function Challenge() {
     }
   }, [mp.roomCode, view])
 
+  useEffect(() => {
+  if (mp.error) {
+    setError(mp.error)
+    setJoining(false)
+    setCreating(false)
+    // Auto-clear after 5 seconds
+    const timer = setTimeout(() => setError(null), 5000)
+    return () => clearTimeout(timer)
+  }
+}, [mp.error])
+
   // If not logged in
   if (!user) {
     return (
@@ -63,16 +74,31 @@ export default function Challenge() {
     )
   }
 
-  const handleCreate = (config: MultiplayerConfig) => {
-    setCreating(true)
-    mp.createRoom(config)
-  }
+const handleCreate = (config: MultiplayerConfig) => {
+  setCreating(true)
+  setError(null)
+  mp.createRoom(config)
+  // Fallback: if no response within 5 seconds, stop loading
+  setTimeout(() => {
+    setCreating(false)
+    if (!mp.roomCode) {
+      setError('Failed to create room. Please try again.')
+    }
+  }, 5000)
+}
 
-  const handleJoin = (code: string) => {
-    setJoining(true)
-    mp.joinRoom(code)
-  }
-
+const handleJoin = (code: string) => {
+  setJoining(true)
+  setError(null)
+  mp.joinRoom(code)
+  // Fallback: if no response within 5 seconds, stop loading
+  setTimeout(() => {
+    setJoining(false)
+    if (!mp.roomCode) {
+      setError('Room not found or is full.')
+    }
+  }, 5000)
+}
   const handleCopyCode = () => {
     if (mp.roomCode) {
       navigator.clipboard.writeText(mp.roomCode)
@@ -115,6 +141,16 @@ export default function Challenge() {
           </span>
         )}
       </div>
+
+      {error && (
+  <motion.div
+    initial={{ opacity: 0, y: -10 }}
+    animate={{ opacity: 1, y: 0 }}
+    className="p-4 rounded-xl bg-accent/10 border border-accent/20 text-sm text-accent text-center"
+  >
+    {error}
+  </motion.div>
+)}
 
       {/* Choose mode */}
       {view === 'choose' && (

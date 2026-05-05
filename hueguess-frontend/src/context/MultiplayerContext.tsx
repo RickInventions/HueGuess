@@ -26,6 +26,7 @@ interface MultiplayerState {
   countdown: number
   playAgainVotes: string[]
   hasSubmitted: boolean
+  error: string | null
 }
 
 interface MultiplayerContextValue extends MultiplayerState {
@@ -62,6 +63,7 @@ const INITIAL_STATE: MultiplayerState = {
   countdown: 0,
   playAgainVotes: [],
   hasSubmitted: false,
+  error: null as string | null,
 }
 
 const MultiplayerContext = createContext<MultiplayerContextValue | null>(null)
@@ -233,9 +235,17 @@ const onRoundStarted = (data: any) => {
       })
     }
 
-    const onError = (data: any) => {
-      console.error('Socket error:', data.message)
-    }
+const onError = (data: any) => {
+  console.error('Socket error:', data.message)
+  // If room not found or room full, reset state
+  if (
+    data.message?.includes('not found') ||
+    data.message?.includes('full') ||
+    data.message?.includes('progress')
+  ) {
+    updateState({ ...INITIAL_STATE, status: 'idle', error: data.message })
+  }
+}
 
     socket.on('room_created', onRoomCreated)
     socket.on('room_joined', onRoomJoined)
@@ -283,13 +293,15 @@ const onRoundStarted = (data: any) => {
     })
   }, [socket, user])
 
-  const joinRoom = useCallback((code: string) => {
-    socket?.emit('join_room', {
-      code: code.toUpperCase().replace(/[^0-9A-F]/g, ''),
-      username: user?.username || 'Anonymous',
-      userId: user?.id || null,
-    })
-  }, [socket, user])
+const joinRoom = useCallback((code: string) => {
+  // Reset any previous error
+  updateState({ error: null })
+  socket?.emit('join_room', {
+    code: code.toUpperCase().replace(/[^0-9A-F]/g, ''),
+    username: user?.username || 'Anonymous',
+    userId: user?.id || null,
+  })
+}, [socket, user])
 
   const leaveRoom = useCallback(() => {
     socket?.emit('leave_room')
