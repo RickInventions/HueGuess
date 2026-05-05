@@ -6,9 +6,10 @@ import Home from './pages/Home'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import VerifyEmail from './pages/VerifyEmail'
-import Game from './pages/Game'
 import Stats from './pages/Stats'
 import Leaderboard from './pages/Leaderboard'
+import Profile from './pages/Profile'
+import Game from './pages/Game'
 
 export default function App() {
   const { isLoading } = useAuth()
@@ -25,7 +26,7 @@ export default function App() {
     <>
       <BackgroundAmbience />
       <Navbar />
-      <main>
+      <main className="pb-8">
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/play" element={<Game />} />
           <Route path="/stats" element={<Stats />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/profile" element={<Profile />} />
         </Routes>
       </main>
     </>

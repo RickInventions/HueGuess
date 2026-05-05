@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Coffee, Swords, ArrowRight, Trophy } from 'lucide-react'
+import { Coffee, Swords, ArrowRight, Trophy, User } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { Card } from '../components/ui/Card'
 
@@ -32,18 +32,18 @@ export default function Home() {
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.2 }}
-        className="w-full max-w-md space-y-4"
+        className="w-full max-w-md space-y-3"
       >
         {/* Casual */}
         <Link to="/play?mode=casual" className="block no-drag">
           <Card hover className="group border-l-4 border-l-primary/30">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-                  <Coffee className="w-6 h-6 text-primary" />
+                <div className="w-11 h-11 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Coffee className="w-5 h-5 text-primary" />
                 </div>
                 <div>
-                  <h3 className="font-heading font-semibold text-lg">Casual</h3>
+                  <h3 className="font-heading font-semibold">Casual</h3>
                   <p className="text-muted text-sm">Relaxed play. No pressure.</p>
                 </div>
               </div>
@@ -54,17 +54,17 @@ export default function Home() {
 
         {/* Competitive */}
         <Link
-          to={user ? '/play?mode=competitive&difficulty=medium' : '/login'}
+          to={user ? '/play?mode=competitive' : '/login'}
           className="block no-drag"
         >
           <Card hover className="group border-l-4 border-l-accent/40">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center">
-                  <Swords className="w-6 h-6 text-accent" />
+                <div className="w-11 h-11 rounded-2xl bg-accent/10 flex items-center justify-center">
+                  <Swords className="w-5 h-5 text-accent" />
                 </div>
                 <div>
-                  <h3 className="font-heading font-semibold text-lg">Competitive</h3>
+                  <h3 className="font-heading font-semibold">Competitive</h3>
                   <p className="text-muted text-sm">
                     {user ? 'Climb the leaderboard.' : 'Sign in to compete.'}
                   </p>
@@ -80,11 +80,11 @@ export default function Home() {
           <Card hover className="group border-l-4 border-l-yellow-400/30">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-yellow-400/10 flex items-center justify-center">
-                  <Trophy className="w-6 h-6 text-yellow-500" />
+                <div className="w-11 h-11 rounded-2xl bg-yellow-400/10 flex items-center justify-center">
+                  <Trophy className="w-5 h-5 text-yellow-500" />
                 </div>
                 <div>
-                  <h3 className="font-heading font-semibold text-lg">Leaderboard</h3>
+                  <h3 className="font-heading font-semibold">Leaderboard</h3>
                   <p className="text-muted text-sm">See the top players.</p>
                 </div>
               </div>
@@ -92,6 +92,26 @@ export default function Home() {
             </div>
           </Card>
         </Link>
+
+        {/* Profile (if logged in) */}
+        {user && (
+          <Link to="/profile" className="block no-drag">
+            <Card hover className="group border-l-4 border-l-muted/40">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-2xl bg-muted/10 flex items-center justify-center">
+                    <User className="w-5 h-5 text-muted" />
+                  </div>
+                  <div>
+                    <h3 className="font-heading font-semibold">Profile</h3>
+                    <p className="text-muted text-sm">View your stats & tier.</p>
+                  </div>
+                </div>
+                <ArrowRight className="w-5 h-5 text-muted group-hover:text-deep transition-colors" />
+              </div>
+            </Card>
+          </Link>
+        )}
       </motion.div>
 
       {/* Footer */}
@@ -99,7 +119,7 @@ export default function Home() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.8 }}
-        className="mt-16 text-xs text-muted"
+        className="mt-12 text-xs text-muted"
       >
         No sign-up required for casual mode.
       </motion.p>

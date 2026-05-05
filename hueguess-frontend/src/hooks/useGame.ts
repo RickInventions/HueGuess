@@ -4,7 +4,7 @@ import { api } from '../lib/api'
 import type { RoundResponse, SubmitResponse, ColorHSL, GameMode, Difficulty } from '../types'
 
 interface GameState {
-  phase: 'loading' | 'memorize' | 'reconstruct' | 'submitting' | 'result' | 'expired'
+  phase: 'idle' | 'loading' | 'memorize' | 'reconstruct' | 'submitting' | 'result' | 'expired'
   round: RoundResponse | null
   result: SubmitResponse | null
   userColor: ColorHSL
@@ -13,15 +13,17 @@ interface GameState {
 
 const DEFAULT_COLOR: ColorHSL = { h: 0, s: 0, l: 0 }
 
+const INITIAL_STATE: GameState = {
+  phase: 'idle',
+  round: null,
+  result: null,
+  userColor: { ...DEFAULT_COLOR },
+  error: null,
+}
+
 export function useGame(mode: GameMode, difficulty?: Difficulty) {
   const navigate = useNavigate()
-  const [state, setState] = useState<GameState>({
-    phase: 'loading',
-    round: null,
-    result: null,
-    userColor: { ...DEFAULT_COLOR },
-    error: null,
-  })
+  const [state, setState] = useState<GameState>(INITIAL_STATE)
 
   const startRound = useCallback(async () => {
     setState({
@@ -44,7 +46,7 @@ export function useGame(mode: GameMode, difficulty?: Difficulty) {
       })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to start round'
-      setState((prev) => ({ ...prev, phase: 'loading', error: message }))
+      setState({ ...INITIAL_STATE, phase: 'idle', error: message })
     }
   }, [mode, difficulty])
 
@@ -86,8 +88,14 @@ export function useGame(mode: GameMode, difficulty?: Difficulty) {
     })
   }, [])
 
-  const goHome = useCallback(() => navigate('/'), [navigate])
-  const playAgain = useCallback(() => startRound(), [startRound])
+  const goHome = useCallback(() => {
+    setState(INITIAL_STATE)
+    navigate('/')
+  }, [navigate])
+
+  const playAgain = useCallback(() => {
+    startRound()
+  }, [startRound])
 
   return {
     ...state,

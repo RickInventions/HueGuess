@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { TrendingUp, Target, Zap, Trophy, Crown } from 'lucide-react'
+import { TrendingUp, Target, Zap, Trophy, Crown, ArrowRight } from 'lucide-react'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { Card } from '../components/ui/Card'
-import { TIER_COLORS, type RankTier } from '../lib/constants'
+import { Button } from '../components/ui/Button'
+import { ProgressBar } from '../components/ui/ProgressBar'
+import { TIER_COLORS, RANK_TIERS, type RankTier } from '../lib/constants'
 import type { PlayerStats, RatingHistoryEntry } from '../types'
 
 export default function Stats() {
-  useAuth()
+  const { user } = useAuth()
   const [stats, setStats] = useState<PlayerStats | null>(null)
   const [history, setHistory] = useState<RatingHistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -33,16 +36,42 @@ export default function Stats() {
 
   if (!stats) {
     return (
-      <div className="flex items-center justify-center min-h-[calc(100dvh-3.5rem)]">
+      <div className="flex flex-col items-center justify-center min-h-[calc(100dvh-3.5rem)] px-4 text-center space-y-4">
+        <Trophy className="w-12 h-12 text-muted" />
         <p className="text-muted">Play a competitive game to see your stats.</p>
+        <Link to="/play?mode=competitive">
+          <Button variant="primary">Play Competitive</Button>
+        </Link>
       </div>
     )
   }
 
   const tierColor = TIER_COLORS[stats.rankTier as RankTier] || '#CD7F32'
+  const tierIndex = RANK_TIERS.indexOf(stats.rankTier as RankTier)
+  const nextTier = tierIndex < RANK_TIERS.length - 1 ? RANK_TIERS[tierIndex + 1] : null
+
+  const tierThresholds: Record<string, number> = {
+    Bronze: 0, Silver: 150, Gold: 300, Platinum: 500, Diamond: 750,
+  }
+  const currentTierMin = tierThresholds[stats.rankTier]
+  const nextTierMin = nextTier ? tierThresholds[nextTier] : currentTierMin + 1
+  const tierProgress = ((stats.rating - currentTierMin) / (nextTierMin - currentTierMin)) * 100
 
   return (
     <div className="max-w-lg mx-auto px-4 py-8 space-y-6">
+      {/* Header with profile link */}
+      <div className="flex items-center justify-between">
+        <h2 className="font-heading text-section">Your Stats</h2>
+        {user && (
+          <Link to="/profile">
+            <Button variant="ghost">
+              Profile
+              <ArrowRight className="w-4 h-4 ml-1" />
+            </Button>
+          </Link>
+        )}
+      </div>
+
       {/* Tier Badge */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -62,6 +91,17 @@ export default function Stats() {
           </span>
           <span className="text-muted text-sm ml-2">Huepoints</span>
         </div>
+
+        {/* Tier progress */}
+        {nextTier && (
+          <div className="mt-3 max-w-xs mx-auto space-y-1">
+            <ProgressBar value={tierProgress} color={tierColor} height={6} />
+            <p className="text-xs text-muted">
+              {nextTierMin - stats.rating} points to{' '}
+              <span style={{ color: TIER_COLORS[nextTier as RankTier] }}>{nextTier}</span>
+            </p>
+          </div>
+        )}
       </motion.div>
 
       {/* Stats grid */}
@@ -93,12 +133,31 @@ export default function Stats() {
         </Card>
       </motion.div>
 
+      {/* Quick links */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="flex gap-3"
+      >
+        <Link to="/play?mode=competitive" className="flex-1">
+          <Button variant="primary" fullWidth>
+            Play
+          </Button>
+        </Link>
+        <Link to="/leaderboard" className="flex-1">
+          <Button variant="secondary" fullWidth>
+            Leaderboard
+          </Button>
+        </Link>
+      </motion.div>
+
       {/* Rating History */}
       {history.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
+          transition={{ delay: 0.25 }}
         >
           <h3 className="font-heading font-semibold text-sm text-muted uppercase tracking-wider mb-3">
             Recent Rating Changes
