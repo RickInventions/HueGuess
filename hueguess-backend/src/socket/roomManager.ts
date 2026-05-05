@@ -144,50 +144,76 @@ class RoomManager {
     return { room, player }
   }
 
-  leaveRoom(socketId: string): { room: RoomState; wasHost: boolean } | undefined {
-    const data = this.getRoomBySocket(socketId)
-    if (!data) return undefined
+leaveRoom(socketId: string): { room: RoomState; wasHost: boolean } | undefined {
+  const data = this.getRoomBySocket(socketId)
+  if (!data) return undefined
 
-    const room = data
-    const player = room.players.find(p => p.socketId === socketId)
-    if (!player) return undefined
+  const room = data
+  const player = room.players.find(p => p.socketId === socketId)
+  if (!player) return undefined
 
-    const wasHost = player.isHost
+  const wasHost = player.isHost
 
-    // Remove player
-    room.players = room.players.filter(p => p.socketId !== socketId)
-    this.socketToRoom.delete(socketId)
+  // Remove player
+  room.players = room.players.filter(p => p.socketId !== socketId)
+  this.socketToRoom.delete(socketId)
 
-    // If room is empty, delete it
-    if (room.players.length === 0) {
-      this.rooms.delete(room.code)
-      return { room, wasHost }
-    }
-
-    // Transfer host if needed
-    if (wasHost && room.players.length > 0) {
-      room.hostSocketId = room.players[0].socketId
-      room.players[0].isHost = true
-    }
-
+  // 🔥 If only 1 connected player left AND game hasn't started playing yet (waiting or countdown)
+  const connectedPlayers = room.players.filter(p => p.connected)
+  const gameNotStarted = room.status === 'waiting' || room.status === 'countdown'
+  
+  if (connectedPlayers.length < 2 && gameNotStarted) {
+    // Notify remaining player before dissolving
+    const io = getIO()
+    io.to(room.code).emit('room_dissolved', {
+      message: 'Not enough players — room dissolved.'
+    })
+    this.rooms.delete(room.code)
+    room.players.forEach(p => this.socketToRoom.delete(p.socketId))
     return { room, wasHost }
   }
 
-  handleDisconnect(socketId: string): void {
-    const data = this.getRoomBySocket(socketId)
-    if (!data) return
+  // If room is empty, delete it
+  if (room.players.length === 0) {
+    this.rooms.delete(room.code)
+    return { room, wasHost }
+  }
 
-    const room = data
-    const player = room.players.find(p => p.socketId === socketId)
-    if (!player) return
+  // Transfer host if needed
+  if (wasHost && room.players.length > 0) {
+    room.hostSocketId = room.players[0].socketId
+    room.players[0].isHost = true
+  }
 
-    // Mark as disconnected but keep in room for a grace period
-    player.connected = false
+  return { room, wasHost }
+}
 
-    // If game is in progress, keep player but mark disconnected
-    // They can reconnect (handled by join_room with same socket)
-    
-    // Remove after a delay if they don't reconnect
+handleDisconnect(socketId: string): void {
+  const data = this.getRoomBySocket(socketId)
+  if (!data) return
+
+  const room = data
+  const player = room.players.find(p => p.socketId === socketId)
+  if (!player) return
+
+  player.connected = false
+
+  // 🔥 Check if we should dissolve immediately
+  const connectedPlayers = room.players.filter(p => p.connected)
+  const gameNotStarted = room.status === 'waiting' || room.status === 'countdown'
+  
+  if (connectedPlayers.length < 2 && gameNotStarted) {
+    const io = getIO()
+    io.to(room.code).emit('room_dissolved', {
+      message: 'Not enough players — room dissolved.'
+    })
+    this.rooms.delete(room.code)
+    room.players.forEach(p => this.socketToRoom.delete(p.socketId))
+    return
+  }
+
+  // If game is in progress, give grace period
+  if (room.status === 'playing') {
     setTimeout(() => {
       const currentRoom = this.rooms.get(room.code)
       if (!currentRoom) return
@@ -203,8 +229,9 @@ class RoomManager {
           players: currentRoom.players.filter(p => p.connected),
         })
       }
-    }, 30000) // 30 second grace period
+    }, 30000)
   }
+}
 
   // ─── Game Logic ─────────────────────────
 

@@ -261,6 +261,7 @@ const onError = (data: any) => {
     socket.on('round_ended', onRoundEnded)
     socket.on('play_again_update', onPlayAgainUpdate)
     socket.on('room_reset', onRoomReset)
+    socket.on('room_dissolved', onRoomDissolved)
     socket.on('session_ended', onSessionEnded)
     socket.on('error', onError)
 
@@ -280,6 +281,7 @@ const onError = (data: any) => {
       socket.off('play_again_update', onPlayAgainUpdate)
       socket.off('room_reset', onRoomReset)
       socket.off('session_ended', onSessionEnded)
+      socket.off('room_dissolved', onRoomDissolved)
       socket.off('error', onError)
     }
   }, [socket, updateState])
@@ -332,6 +334,15 @@ const joinRoom = useCallback((code: string) => {
   const playAgain = useCallback(() => {
     socket?.emit('play_again')
   }, [socket])
+
+  const onRoomDissolved = (data: any) => {
+  console.log('📦 room_dissolved', data)
+  updateState({ 
+    ...INITIAL_STATE, 
+    status: 'idle', 
+    error: data.message || 'Room dissolved — not enough players' 
+  })
+}
 
   const endRoom = useCallback(() => {
     socket?.emit('end_room')

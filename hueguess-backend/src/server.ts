@@ -12,7 +12,11 @@ import { rateLimiter, authRateLimiter, gameSubmitLimiter } from './middleware/ra
 import { sanitizeStrings, sanitizeColorInput } from './middleware/sanitizer.js'
 
 dotenv.config()
-
+// Strip console.log in production (keep console.error/warn)
+if (process.env.NODE_ENV === 'production') {
+  console.log = () => {}
+  console.debug = () => {}
+}
 const app = express()
 const PORT = process.env.PORT || 3000
 

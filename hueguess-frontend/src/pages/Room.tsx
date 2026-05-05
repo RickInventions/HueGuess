@@ -25,11 +25,16 @@ export default function Room() {
   }, [mp.status, mp.currentRound])
 
   // Redirect if kicked out
-  useEffect(() => {
-    if (mp.status === 'idle' && !mp.roomCode) {
+useEffect(() => {
+  if (mp.status === 'idle' && !mp.roomCode) {
+    // Check if we got dissolved
+    if (mp.error) {
+      navigate('/challenge', { replace: true, state: { message: mp.error } })
+    } else {
       navigate('/challenge', { replace: true })
     }
-  }, [mp.status, mp.roomCode, navigate])
+  }
+}, [mp.status, mp.roomCode, mp.error, navigate])
 
   // Memorization timer — runs during memorization phase only
   const memTimer = useTimer({

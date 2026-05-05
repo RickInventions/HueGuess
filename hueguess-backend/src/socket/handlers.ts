@@ -3,8 +3,10 @@ import { roomManager, type RoomConfig } from './roomManager.js'
 import { calculateMultiplayerAccuracy } from './gameManager.js'
 import type { ColorHSL } from '../types/index.js'
 import { GameService } from '../services/game.service.js'
+import { getIO } from './index.js'
 
 export function registerHandlers(io: Server, socket: Socket) {
+  const roomCountdowns = new Map<string, ReturnType<typeof setInterval>>()
   // ─── Room Management ───────────────────
 
   socket.on('create_room', (data: { username: string; config: RoomConfig; userId?: string }) => {
@@ -141,7 +143,22 @@ export function registerHandlers(io: Server, socket: Socket) {
         if (count > 0) {
           io.to(data.room.code).emit('all_ready_countdown', { countdown: count })
         } else {
-          clearInterval(countdownInterval)
+            clearInterval(countdownInterval)
+  roomCountdowns.delete(data.room.code)
+  
+  // 🔥 Check room still exists (might have dissolved)
+  const currentRoom = roomManager.getRoom(data.room.code)
+  if (!currentRoom || currentRoom.status !== 'countdown') return
+  
+  // Check we still have enough connected players
+  const connectedPlayers = currentRoom.players.filter(p => p.connected)
+  if (connectedPlayers.length < 2) {
+    const io = getIO()
+    io.to(currentRoom.code).emit('room_dissolved', {
+      message: 'Not enough players — room dissolved.'
+    })
+    return
+  }
           
           // Generate color and start round
           const color = GameService.generateColor('medium')
