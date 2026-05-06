@@ -119,7 +119,7 @@ export class LeaderboardService {
       };
     }
     
-    const { rating, rank_tier } = statsResult.rows[0];
+    const { rating, rank_tier } = statsResult.rows[0] as { rating: number; rank_tier: RankTier };
     
     // Get position
     const positionResult = await query(
