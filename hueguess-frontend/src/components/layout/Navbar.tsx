@@ -18,16 +18,26 @@ export function Navbar() {
         </Link>
 
         <div className="flex items-center gap-3">
-{!user && (
-  <>
-    <Link to="/login">
-      <Button variant="ghost">Log in</Button>
-    </Link>
-    <Link to="/register">
-      <Button variant="primary">Sign up</Button>
-    </Link>
-  </>
-)}
+          {user ? (
+            <>
+              {location.pathname !== '/stats' && (
+                <Link to="/stats">
+                  <Button variant="ghost" icon={<User className="w-4 h-4" />}>
+                    <span className="hidden sm:inline">{user.username}</span>
+                  </Button>
+                </Link>
+              )}
+            </>
+          ) : (
+            <>
+              <Link to="/login">
+                <Button variant="ghost">Log in</Button>
+              </Link>
+              <Link to="/register">
+                <Button variant="primary">Sign up</Button>
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </nav>
