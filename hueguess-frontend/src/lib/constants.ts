@@ -1,5 +1,5 @@
 const BACKEND_URL = import.meta.env.PROD 
-  ? 'https://hueguess-api.onrender.com'
+  ? 'https://hueguess.onrender.com'
   : ''
 
 export const API_BASE = `${BACKEND_URL}/api`

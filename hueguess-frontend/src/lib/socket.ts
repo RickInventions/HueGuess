@@ -4,7 +4,7 @@ let socket: Socket | null = null
 
 function getSocketUrl(): string {
   if (import.meta.env.PROD) {
-    return 'https://hueguess-api.onrender.com'
+    return 'https://hueguess.onrender.com'
   }
   return '' 
 }
