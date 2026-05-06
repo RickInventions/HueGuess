@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Clock, Eye, EyeOff } from 'lucide-react'
+import { Send, Clock, Eye } from 'lucide-react'
 import { useMultiplayer } from '../hooks/useMultiplayer'
 import { ColorSliders } from '../components/game/ColorSliders'
 import { RoundResults } from '../components/multiplayer/RoundResults'
