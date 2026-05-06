@@ -7,7 +7,7 @@ export function getSocket(): Socket {
     const token = localStorage.getItem('hueguess_token')
     
     // Connect directly to the backend server, not through Vite proxy
-    const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+    const backendUrl = import.meta.env.VITE_API_URL || 'https://hueguess.onrender.com'
     
     socket = io(backendUrl, {
       auth: token ? { token } : undefined,
