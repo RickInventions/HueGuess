@@ -202,7 +202,7 @@ export default function Challenge() {
           <Card className="text-center space-y-3">
             <p className="text-xs text-muted uppercase tracking-wider">Room Code</p>
             <div className="flex items-center justify-center gap-3">
-              <span className="font-heading text-2xl font-bold tracking-[0.15em] font-mono">
+              <span className="font-heading text-2xl font-bold tracking-[0.15em]">
                 {mp.roomCode}
               </span>
               <button

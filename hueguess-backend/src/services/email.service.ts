@@ -2,7 +2,7 @@ import fetch from 'node-fetch';
 
 const EMAIL_PROXY_URL = process.env.EMAIL_PROXY_URL!;
 const EMAIL_PROXY_KEY = process.env.EMAIL_PROXY_KEY!;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND_URL = process.env.CORS_ORIGIN || 'http://localhost:5173';
 
 export class EmailService {
   static generateVerificationCode(): string {

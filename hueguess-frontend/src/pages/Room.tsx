@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Clock } from 'lucide-react'
+import { Send, Clock, Eye } from 'lucide-react'
 import { useMultiplayer } from '../hooks/useMultiplayer'
 import { ColorSliders } from '../components/game/ColorSliders'
-import { TimerBar } from '../components/game/TimerBar'
 import { RoundResults } from '../components/multiplayer/RoundResults'
 import { RoomLeaderboard } from '../components/multiplayer/RoomLeaderboard'
 import { Button } from '../components/ui/Button'
@@ -15,7 +14,6 @@ export default function Room() {
   const mp = useMultiplayer()
   const [phase, setPhase] = useState<'loading' | 'memorize' | 'reconstruct'>('loading')
 
-  // Reset phase when new round starts
   useEffect(() => {
     if (mp.status === 'playing') {
       setPhase('memorize')
@@ -24,36 +22,26 @@ export default function Room() {
     }
   }, [mp.status, mp.currentRound])
 
-  // Redirect if kicked out
-useEffect(() => {
-  if (mp.status === 'idle' && !mp.roomCode) {
-    // Check if we got dissolved
-    if (mp.error) {
-      navigate('/challenge', { replace: true, state: { message: mp.error } })
-    } else {
-      navigate('/challenge', { replace: true })
+  useEffect(() => {
+    if (mp.status === 'idle' && !mp.roomCode) {
+      if (mp.error) {
+        navigate('/challenge', { replace: true, state: { message: mp.error } })
+      } else {
+        navigate('/challenge', { replace: true })
+      }
     }
-  }
-}, [mp.status, mp.roomCode, mp.error, navigate])
+  }, [mp.status, mp.roomCode, mp.error, navigate])
 
-  // Memorization timer — runs during memorization phase only
   const memTimer = useTimer({
     duration: mp.colorDuration || 3,
     autoStart: phase === 'memorize' && mp.status === 'playing',
-    onExpire: () => {
-      // When memorization ends, switch to reconstruction
-      setPhase('reconstruct')
-    },
+    onExpire: () => setPhase('reconstruct'),
   })
 
-  // Round timer — runs during reconstruction phase only
   const roundTimer = useTimer({
     duration: mp.roundDuration || 20,
     autoStart: phase === 'reconstruct' && mp.status === 'playing',
   })
-
-  // Auto-end when round timer expires
-  // (backend handles the actual timeout, this is just UI)
 
   const showColor = phase === 'memorize' && mp.status === 'playing'
   const connectedPlayers = mp.players.filter(p => p.connected)
@@ -92,7 +80,6 @@ useEffect(() => {
   if (mp.status === 'round_ended') {
     return (
       <div className="max-w-game mx-auto px-4 py-6 space-y-6">
-
         <RoundResults results={mp.roundResults} timedOut={mp.timedOut} />
         <RoomLeaderboard entries={mp.leaderboard} rounds={mp.currentRound} />
 
@@ -123,21 +110,33 @@ useEffect(() => {
   if (mp.status === 'playing') {
     return (
       <div className="max-w-game mx-auto px-4 py-6 space-y-6">
-        {/* Header */}
+        {/* Header — single inline timer, no TimerBar */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 text-xs text-muted">
-            {/* Show timer based on phase */}
+          <span className="text-xs font-medium text-muted">
+            Round {mp.currentRound} of {mp.totalRounds}
+          </span>
+          <div className="flex items-center gap-3 text-xs">
             {phase === 'memorize' ? (
-              <div className="flex items-center gap-1">
-                <Clock className="w-3 h-3" />
-                <span>{Math.ceil(memTimer.timeLeft)}s</span>
+              <div className="flex items-center gap-1.5 bg-surface-alt px-3 py-1.5 rounded-full">
+                <Eye className="w-3 h-3 text-primary" />
+                <span className="font-mono font-medium text-primary">
+                  {Math.ceil(memTimer.timeLeft)}s
+                </span>
               </div>
             ) : (
               <>
-                <span>{mp.submittedCount}/{mp.totalPlayers} submitted</span>
-                <div className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  <span className={roundTimer.percentage < 25 ? 'text-accent font-medium' : ''}>
+                <span className="text-muted">
+                  {mp.submittedCount}/{mp.totalPlayers}
+                </span>
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${
+                  roundTimer.percentage < 25 ? 'bg-accent/10' : 'bg-surface-alt'
+                }`}>
+                  <Clock className={`w-3 h-3 ${
+                    roundTimer.percentage < 25 ? 'text-accent' : 'text-muted'
+                  }`} />
+                  <span className={`font-mono font-medium ${
+                    roundTimer.percentage < 25 ? 'text-accent' : 'text-muted'
+                  }`}>
                     {Math.ceil(roundTimer.timeLeft)}s
                   </span>
                 </div>
@@ -147,51 +146,37 @@ useEffect(() => {
         </div>
 
         {/* Memorization phase */}
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {showColor && mp.roundColor && (
             <motion.div
+              key="memorize"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, filter: 'blur(8px)' }}
-              transition={{ duration: 0.5 }}
+              transition={{ duration: 0.4 }}
               className="space-y-4"
             >
-              {/* Memorization timer bar */}
-              <TimerBar
-                percentage={memTimer.percentage}
-                isWarning={memTimer.percentage < 25}
-                label="Memorize the color"
-                phase="memorize"
-              />
-
               <div
-                className="w-full aspect-square max-w-[220px] mx-auto rounded-2xl shadow-card"
+                className="w-full aspect-square max-w-[240px] mx-auto rounded-2xl shadow-card transition-colors"
                 style={{
                   backgroundColor: `hsl(${mp.roundColor.h}, ${mp.roundColor.s}%, ${mp.roundColor.l}%)`,
                 }}
               />
               <p className="text-center text-sm text-muted">
-                Memorize this color · {Math.ceil(memTimer.timeLeft)}s remaining
+                Memorize this color
               </p>
             </motion.div>
           )}
-        </AnimatePresence>
 
-        {/* Reconstruction phase */}
-        <AnimatePresence>
+          {/* Reconstruction phase */}
           {phase === 'reconstruct' && mp.status === 'playing' && (
             <motion.div
+              key="reconstruct"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
               className="space-y-6"
             >
-              {/* Reconstruction timer bar */}
-              <TimerBar
-                percentage={roundTimer.percentage}
-                isWarning={roundTimer.percentage < 25}
-                label={`Reconstruct · ${mp.roundDuration}s`}
-                phase="reconstruct"
-              />
 
               <ColorSliders
                 color={mp.myColor}
@@ -214,7 +199,6 @@ useEffect(() => {
     )
   }
 
-  // Fallback
   return (
     <div className="max-w-game mx-auto px-4 py-12 text-center">
       <p className="text-muted">Loading...</p>

@@ -1,4 +1,8 @@
-export const API_BASE = '/api'
+const BACKEND_URL = import.meta.env.PROD 
+  ? 'https://hueguess.onrender.com'
+  : ''
+
+export const API_BASE = `${BACKEND_URL}/api`
 
 export const RANK_TIERS = ['Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond'] as const
 export type RankTier = (typeof RANK_TIERS)[number]
@@ -17,4 +21,4 @@ export const DIFFICULTY_LABELS: Record<string, string> = {
   hard: 'Hard',
 }
 
-export const SUBMISSION_WINDOW = 30 // seconds total to submit after memorization
+export const SUBMISSION_WINDOW = 30
