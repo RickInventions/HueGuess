@@ -1,18 +1,14 @@
 import { Router } from 'express';
 import { GameService } from '../services/game.service.js';
-import { authMiddleware, AuthRequest } from '../middleware/auth.middleware.js';
+import { CompetitiveService } from '../services/competitive.service.js';
+import { authMiddleware, AuthRequest, optionalAuthMiddleware } from '../middleware/auth.middleware.js';
 import { DIFFICULTY_CONFIGS } from '../types/game.types.js';
 import { validateHSL } from '../utils/hsl.utils.js';
 
 const router = Router();
 
-// Helper to get user ID from request (if authenticated)
-const getUserId = (req: AuthRequest): string | undefined => {
-  return req.user?.userId;
-};
-
-// Generate a new round (NO auth required for casual)
-router.post('/generate', async (req, res) => {
+// Generate a new round (optional auth - casual doesn't need it)
+router.post('/generate', optionalAuthMiddleware, async (req: AuthRequest, res) => {
   try {
     const { difficulty } = req.body;
     
@@ -40,8 +36,8 @@ router.post('/generate', async (req, res) => {
   }
 });
 
-// Submit a guess (NO auth required for casual)
-router.post('/submit', async (req, res) => {
+// Submit a guess (optional auth - casual doesn't need it, competitive does)
+router.post('/submit', optionalAuthMiddleware, async (req: AuthRequest, res) => {
   try {
     const {
       mode,
@@ -87,20 +83,20 @@ router.post('/submit', async (req, res) => {
     // Process the guess
     const result = GameService.processGuess(original, user, difficulty);
     
-    // Save round for competitive mode only (requires auth)
+    // Handle competitive mode (requires auth)
     let roundId = null;
-    if (mode !== 'casual') {
-      // For competitive/challenge, we need the user to be authenticated
-      // Cast req to AuthRequest to access user
-      const authReq = req as AuthRequest;
-      if (!authReq.user) {
+    let huePointsUpdate = null;
+    
+    if (mode === 'competitive') {
+      if (!req.user) {
         res.status(401).json({ error: 'Authentication required for competitive mode' });
         return;
       }
       
+      // STEP 1: Save the round FIRST to get the roundId
       roundId = await GameService.saveRound({
-        userId: authReq.user.userId,
-        mode: mode as any,
+        userId: req.user.userId,
+        mode: 'competitive',
         difficulty,
         originalH,
         originalS,
@@ -111,20 +107,38 @@ router.post('/submit', async (req, res) => {
         memorizationSeconds,
         isReload: false,
       });
+      
+      // STEP 2: Update competitive stats with the roundId
+      huePointsUpdate = await CompetitiveService.updateAfterGame(
+        req.user.userId,
+        roundId,  // Now passing the roundId
+        result.accuracy,
+        difficulty
+      );
     }
     
+    // For casual mode, just return the result (no DB save)
     res.json({
       success: true,
       roundId,
       result: {
         accuracy: result.accuracy,
-        score: result.score,
         isNegative: result.isNegative,
         originalColor: result.originalColor,
         userColor: result.userColor,
         multiplier: result.multiplier,
         negThreshold: result.negThreshold,
+        difficulty: result.difficulty,
       },
+      ...(huePointsUpdate && {
+        huePoints: {
+          oldRating: huePointsUpdate.oldRating,
+          newRating: huePointsUpdate.newRating,
+          change: huePointsUpdate.ratingChange,
+          streak: huePointsUpdate.newStreak,
+          rankTier: huePointsUpdate.rankTier,
+        }
+      }),
     });
   } catch (error) {
     console.error('Submit guess error:', error);
@@ -132,13 +146,12 @@ router.post('/submit', async (req, res) => {
   }
 });
 
-// Register reload penalty (auth required - need user ID)
-router.post('/reload-penalty', async (req, res) => {
+// Register reload penalty (requires auth)
+router.post('/reload-penalty', authMiddleware, async (req, res) => {
   try {
     const { mode, difficulty, originalH, originalS, originalL, memorizationSeconds } = req.body;
-    
-    // Cast to AuthRequest to check user
     const authReq = req as AuthRequest;
+    
     if (!authReq.user) {
       res.status(401).json({ error: 'Authentication required' });
       return;
@@ -149,6 +162,7 @@ router.post('/reload-penalty', async (req, res) => {
       return;
     }
     
+    // STEP 1: Save the round FIRST
     const roundId = await GameService.registerReloadPenalty(
       authReq.user.userId,
       mode,
@@ -156,6 +170,30 @@ router.post('/reload-penalty', async (req, res) => {
       { h: originalH, s: originalS, l: originalL },
       memorizationSeconds
     );
+    
+    // STEP 2: Update stats for competitive mode with the roundId
+    if (mode === 'competitive') {
+      const update = await CompetitiveService.updateAfterGame(
+        authReq.user.userId,
+        roundId,
+        0,  // 0% accuracy for reload
+        difficulty
+      );
+      
+      res.json({
+        success: true,
+        roundId,
+        message: 'Reload penalty registered (0% accuracy)',
+        huePoints: {
+          oldRating: update.oldRating,
+          newRating: update.newRating,
+          change: update.ratingChange,
+          streak: update.newStreak,
+          rankTier: update.rankTier,
+        },
+      });
+      return;
+    }
     
     res.json({
       success: true,

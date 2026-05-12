@@ -31,6 +31,28 @@ export const authMiddleware = (
   }
 };
 
+export const optionalAuthMiddleware = (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const authHeader = req.headers.authorization;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.substring(7);
+    
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+      req.user = decoded;
+    } catch (error) {
+      // Invalid token - just continue without user
+      console.error('Optional auth token invalid:', error);
+    }
+  }
+  
+  next();
+};
+
 export const requireVerified = (
   req: AuthRequest,
   res: Response,

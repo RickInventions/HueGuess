@@ -1,5 +1,3 @@
-import { HSLColor } from "../utils/hsl.utils";
-
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'extreme';
 export type GameMode = 'casual' | 'competitive' | 'challenge';
 
@@ -47,23 +45,23 @@ export const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
   },
 };
 
-export interface GameRound {
-  id?: string;
-  userId?: string;
-  mode: GameMode;
-  difficulty: Difficulty;
+export interface HSLColor {
+  h: number;
+  s: number;
+  l: number;
+}
+
+export interface RoundResult {
+  accuracy: number;
+  isNegative: boolean;
   originalColor: HSLColor;
-  userColor?: HSLColor;
-  accuracy?: number;
-  memorizationSeconds: number;
-  roundCreatedAt: Date;
-  submittedAt?: Date;
-  isReload: boolean;
-  score?: number;
+  userColor: HSLColor;
+  multiplier: number;
+  negThreshold: number;
+  difficulty: Difficulty;
 }
 
 export interface SubmitGuessInput {
-  userId?: string; 
   mode: GameMode;
   difficulty: Difficulty;
   originalH: number;
@@ -74,15 +72,4 @@ export interface SubmitGuessInput {
   userL: number;
   memorizationSeconds: number;
   isReload?: boolean;
-}
-
-
-export interface RoundResult {
-  accuracy: number;
-  score: number;
-  isNegative: boolean;
-  originalColor: HSLColor;
-  userColor: HSLColor;
-  multiplier: number;
-  negThreshold: number;
 }

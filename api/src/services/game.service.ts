@@ -26,40 +26,27 @@ export class GameService {
     return DIFFICULTY_CONFIGS[difficulty];
   }
   
-  // Calculate score from accuracy and difficulty
-  static calculateScore(accuracy: number, difficulty: Difficulty): number {
-    const config = DIFFICULTY_CONFIGS[difficulty];
-    let score = accuracy * config.multiplier;
-    
-    if (accuracy < config.negThreshold) {
-      score = -Math.abs(score);
-    }
-    
-    return Math.round(score);
-  }
-  
-  // Process a guess submission
+  // Process a guess submission (no score, just accuracy and metadata)
   static processGuess(
     original: HSLColor,
     user: HSLColor,
     difficulty: Difficulty
-  ): RoundResult {
+  ): Omit<RoundResult, 'score'> {
     const accuracy = calculateAccuracy(original, user);
-    const score = this.calculateScore(accuracy, difficulty);
     const config = DIFFICULTY_CONFIGS[difficulty];
     
     return {
       accuracy,
-      score,
       isNegative: accuracy < config.negThreshold,
       originalColor: original,
       userColor: user,
       multiplier: config.multiplier,
       negThreshold: config.negThreshold,
+      difficulty,
     };
   }
   
-  // Save round to database (for competitive/challenge modes)
+  // Save round to database
   static async saveRound(input: {
     userId: string;
     mode: GameMode;
@@ -87,7 +74,7 @@ export class GameService {
       isReload = false,
     } = input;
     
-    // Calculate accuracy if user submitted values
+    // Calculate accuracy
     let accuracy: number | null = null;
     if (userH !== undefined && userS !== undefined && userL !== undefined) {
       const original: HSLColor = { h: originalH, s: originalS, l: originalL };
@@ -148,7 +135,7 @@ export class GameService {
     });
   }
   
-  // Get recent rounds for a user (for history)
+  // Get recent rounds for a user
   static async getUserRecentRounds(userId: string, limit: number = 10) {
     const result = await pool.query(
       `SELECT id, mode, difficulty, accuracy, memorization_seconds, 
