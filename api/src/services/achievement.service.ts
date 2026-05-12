@@ -345,4 +345,54 @@ export class AchievementService {
       totalPossible: parseInt(totalPossibleResult.rows[0].count),
     };
   }
+
+// Get recent UNSEEN unlocked achievements (for notifications)
+static async getRecentUnseenUnlocked(userId: string, limit: number = 5): Promise<any[]> {
+  const result = await pool.query(
+    `SELECT ua.unlocked_at, a.key, a.name, a.description, a.icon, a.category, ua.is_seen
+     FROM user_achievements ua
+     JOIN achievements a ON ua.achievement_key = a.key
+     WHERE ua.user_id = $1 AND (ua.is_seen IS NULL OR ua.is_seen = false)
+     ORDER BY ua.unlocked_at DESC
+     LIMIT $2`,
+    [userId, limit]
+  );
+  
+  return result.rows;
+}
+
+// Mark specific achievements as seen
+static async markAchievementsAsSeen(userId: string, achievementKeys: string[]): Promise<void> {
+  if (achievementKeys.length === 0) return;
+  
+  const placeholders = achievementKeys.map((_, i) => `$${i + 2}`).join(',');
+  await pool.query(
+    `UPDATE user_achievements 
+     SET is_seen = true, seen_at = NOW()
+     WHERE user_id = $1 AND achievement_key IN (${placeholders})`,
+    [userId, ...achievementKeys]
+  );
+}
+
+// Mark all recent achievements as seen
+static async markAllRecentAsSeen(userId: string): Promise<void> {
+  await pool.query(
+    `UPDATE user_achievements 
+     SET is_seen = true, seen_at = NOW()
+     WHERE user_id = $1 AND (is_seen IS NULL OR is_seen = false)`,
+    [userId]
+  );
+}
+
+// Get count of unseen achievements (for badge/number display)
+static async getUnseenCount(userId: string): Promise<number> {
+  const result = await pool.query(
+    `SELECT COUNT(*) as count
+     FROM user_achievements
+     WHERE user_id = $1 AND (is_seen IS NULL OR is_seen = false)`,
+    [userId]
+  );
+  
+  return parseInt(result.rows[0].count);
+}
 }
