@@ -1,5 +1,6 @@
 import pool from '../config/db.js';
 import { Difficulty, DIFFICULTY_CONFIGS } from '../types/game.types.js';
+import { AchievementService } from './achievement.service.js';
 
 const RANK_THRESHOLDS = {
   bronze: 0,
@@ -111,9 +112,72 @@ export class CompetitiveService {
     await pool.query(`INSERT INTO rating_history (user_id, game_round_id, rating_before, rating_after, rating_change, accuracy, difficulty) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
       [userId, roundId, oldRating, newRating, change, accuracy, difficulty]);
 
-    return { oldRating, newRating, ratingChange: change, oldStreak: streak, newStreak, rankTier: newTier };
+
+const newlyUnlocked = await AchievementService.checkAndUnlockAchievements(userId, {
+  accuracy,
+  difficulty,
+  mode: 'competitive',
+  ratingAfter: newRating,
+  streakAfter: newStreak,
+});
+
+    return { oldRating, newRating, ratingChange: change, oldStreak: streak, newStreak, rankTier: newTier, newlyUnlocked };
   }
 
-  static async getUserStats(userId: string) { /* keep existing */ }
-  static async getLeaderboard(limit: number = 100, offset: number = 0) { /* keep existing */ }
-}
+  
+
+  // Get user stats
+  static async getUserStats(userId: string): Promise<any> {
+    const result = await pool.query(
+      `SELECT rating, rank_tier, games_played, total_accuracy, avg_accuracy,
+              best_score, current_streak, best_streak, last_game_at, created_at, updated_at
+       FROM competitive_stats
+       WHERE user_id = $1`,
+      [userId]
+    );
+    
+    if (result.rows.length === 0) {
+      await this.initializeUserStats(userId);
+      return this.getUserStats(userId);
+    }
+    
+    const stats = result.rows[0];
+    const rankProgress = getRankProgress(stats.rating);
+    
+    // Get games per difficulty breakdown
+    const gamesPerDifficulty = await pool.query(
+      `SELECT difficulty, COUNT(*) as count
+       FROM game_rounds
+       WHERE user_id = $1 AND mode = 'competitive' AND accuracy IS NOT NULL
+       GROUP BY difficulty`,
+      [userId]
+    );
+    
+    // Get recent games
+    const recentGames = await pool.query(
+      `SELECT id, difficulty, accuracy, memorization_seconds, created_at, is_reload
+       FROM game_rounds
+       WHERE user_id = $1 AND mode = 'competitive' AND accuracy IS NOT NULL
+       ORDER BY created_at DESC
+       LIMIT 10`,
+      [userId]
+    );
+    
+    // Get rating history for chart
+    const ratingHistory = await pool.query(
+      `SELECT created_at, rating_after as rating
+       FROM rating_history
+       WHERE user_id = $1
+       ORDER BY created_at ASC
+       LIMIT 100`,
+      [userId]
+    );
+    
+    return {
+      ...stats,
+      rankProgress,
+      gamesPerDifficulty: gamesPerDifficulty.rows,
+      recentGames: recentGames.rows,
+      ratingHistory: ratingHistory.rows,
+    };
+}}

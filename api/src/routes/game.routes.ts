@@ -137,7 +137,8 @@ router.post('/submit', optionalAuthMiddleware, async (req: AuthRequest, res) => 
           change: huePointsUpdate.ratingChange,
           streak: huePointsUpdate.newStreak,
           rankTier: huePointsUpdate.rankTier,
-        }
+        },
+          newlyUnlocked: huePointsUpdate.newlyUnlocked,
       }),
     });
   } catch (error) {
