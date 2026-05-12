@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth.routes.js';
 import gameRoutes from './routes/game.routes.js';
 import statsRoutes from './routes/stats.routes.js';
+import leaderboardRoutes from './routes/leaderboard.routes.js';  
+import dailyRoutes from './routes/daily.routes.js';              
 
 dotenv.config();
 
@@ -20,6 +22,8 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/game', gameRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);  
+app.use('/api/daily', dailyRoutes);              
 
 // Health check
 app.get('/health', (req, res) => {
