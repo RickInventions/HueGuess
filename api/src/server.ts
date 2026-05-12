@@ -7,6 +7,7 @@ import statsRoutes from './routes/stats.routes.js';
 import leaderboardRoutes from './routes/leaderboard.routes.js';  
 import dailyRoutes from './routes/daily.routes.js';         
 import achievementRoutes from './routes/achievement.routes.js';     
+import userRoutes from './routes/user.routes.js';
 
 dotenv.config();
 
@@ -25,7 +26,8 @@ app.use('/api/game', gameRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);  
 app.use('/api/daily', dailyRoutes);        
-app.use('/api/achievements', achievementRoutes);      
+app.use('/api/achievements', achievementRoutes);    
+app.use('/api/user', userRoutes);  
 
 // Health check
 app.get('/health', (req, res) => {
