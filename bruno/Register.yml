@@ -10,11 +10,16 @@ http:
     type: json
     data: |-
       {
-        "username": "BobbyDee",
-        "email": "flashfit121@gmail.com",
-        "password": "Password121"
+        "username": "testuser",
+        "email": "{{third_email}}",
+        "password": "Passwordd121"
       }
   auth: inherit
+
+runtime:
+  variables:
+    - name: third_email
+      value: flashfit121@gmail.com
 
 settings:
   encodeUrl: true
