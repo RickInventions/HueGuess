@@ -10,6 +10,8 @@ import userRoutes from './routes/user.routes.js';
 import { initializeSocketIO } from './socket/index.js';
 import authRoutes from './routes/auth.routes.js';
 import gameRoutes from './routes/game.routes.js';
+import adminRoutes from './routes/admin.routes.js';
+import feedbackRoutes from './routes/feedback.routes.js';
 
 dotenv.config();
 
@@ -34,6 +36,8 @@ app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/daily', dailyRoutes);        
 app.use('/api/achievements', achievementRoutes);    
 app.use('/api/user', userRoutes);  
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
