@@ -86,6 +86,7 @@ class RoomManager {
     
     const player = room.players.get(socketId);
     const wasHost = player?.isHost || false;
+    const username = player?.username;
     
     room.players.delete(socketId);
     this.playerToRoom.delete(socketId);
@@ -125,6 +126,11 @@ class RoomManager {
     const room = this.rooms.get(roomCode);
     if (!room) return null;
     
+    // Don't allow ready if game is ended (waiting for play again)
+    if (room.phase === 'ended') {
+      return null;
+    }
+    
     const player = room.players.get(socketId);
     if (!player) return null;
     
@@ -143,32 +149,44 @@ class RoomManager {
     return true;
   }
 
-  // Start game
-  startGame(roomCode: string): Room | null {
+  // Start a NEW GAME (resets all stats, called only once per session)
+  startNewGame(roomCode: string): Room | null {
     const room = this.rooms.get(roomCode);
     if (!room) return null;
     
     if (!this.areAllPlayersReady(room)) return null;
+    if (room.currentRound !== 0) {
+      return null;
+    }
     
-    room.phase = 'countdown';
+    // Set phase to 'waiting' first - countdown will be handled by handler
+    // We don't set to 'countdown' here because we need to start the first round immediately after countdown
+    room.phase = 'waiting';
     room.currentRound = 1;
     room.roundResults.clear();
     room.playAgainVotes.clear();
     
-    // Reset player stats
+    // Reset all player stats
     for (const player of room.players.values()) {
       player.status = 'playing';
       player.totalAccuracy = 0;
       player.roundsPlayed = 0;
+      player.currentAccuracy = undefined;
     }
     
     return room;
   }
 
-  // Start a new round
-  startRound(roomCode: string): { room: Room; color: HSLColor } | null {
+  // Start a NEW ROUND (preserves stats, increments round counter)
+  startNextRound(roomCode: string): { room: Room; color: HSLColor } | null {
     const room = this.rooms.get(roomCode);
     if (!room) return null;
+    
+    // Ensure we're in waiting phase and game has started (currentRound > 0)
+    // Also allow from 'results' phase if we just finished a round
+    if (room.phase !== 'waiting' && room.phase !== 'results') {
+      return null;
+    }
     
     // Generate color based on difficulty
     const config = DIFFICULTY_CONFIGS[room.config.difficulty];
@@ -219,7 +237,7 @@ class RoomManager {
     // Check if already submitted
     if (room.roundResults.has(socketId)) return null;
     
-    // Calculate accuracy
+    // Calculate accuracy (3 decimal places)
     const accuracy = isTimeout ? 0 : this.calculateAccuracy(room.currentColor!, color);
     
     room.roundResults.set(socketId, {
@@ -232,7 +250,7 @@ class RoomManager {
     return room;
   }
 
-  // Calculate accuracy (reuse existing formula)
+  // Calculate accuracy (returns 3 decimal places)
   private calculateAccuracy(original: HSLColor, user: HSLColor): number {
     const hueDiff = Math.min(
       Math.abs(original.h - user.h),
@@ -245,7 +263,8 @@ class RoomManager {
     const weightedDiff = (hueDiff * 0.5) + (satDiff * 0.25) + (lightDiff * 0.25);
     const accuracy = Math.max(0, Math.min(100, (1 - weightedDiff) * 100));
     
-    return Math.round(accuracy * 100) / 100;
+    // Round to 3 decimal places
+    return Math.round(accuracy * 1000) / 1000;
   }
 
   // End round and calculate results
@@ -265,7 +284,7 @@ class RoomManager {
       }
     }
     
-    // Update player stats
+    // Update player stats (accumulate accuracy)
     for (const [socketId, player] of room.players) {
       const result = room.roundResults.get(socketId)!;
       player.totalAccuracy += result.accuracy;
@@ -278,29 +297,29 @@ class RoomManager {
     return room;
   }
 
-  // Get round results with leaderboard
+  // Get round results with cumulative average (3 decimals)
   getRoundResults(room: Room): any[] {
     const results = [];
     for (const [socketId, result] of room.roundResults) {
       const player = room.players.get(socketId)!;
+      const cumulativeAvg = player.roundsPlayed > 0 ? player.totalAccuracy / player.roundsPlayed : 0;
       results.push({
         socketId,
         userId: player.userId,
         username: player.username,
-        accuracy: result.accuracy,
+        accuracy: Math.round(result.accuracy * 1000) / 1000,
         userColor: result.userColor,
         isTimeout: result.isTimeout,
-        totalAverage: player.totalAccuracy / player.roundsPlayed,
+        cumulativeAverage: Math.round(cumulativeAvg * 1000) / 1000,
       });
     }
     
     // Sort by accuracy (descending)
     results.sort((a, b) => b.accuracy - a.accuracy);
-    
     return results;
   }
 
-  // Get overall room leaderboard
+  // Get overall room leaderboard (3 decimals)
   getRoomLeaderboard(room: Room): any[] {
     const leaderboard = [];
     for (const [socketId, player] of room.players) {
@@ -308,13 +327,13 @@ class RoomManager {
         socketId,
         userId: player.userId,
         username: player.username,
-        averageAccuracy: player.roundsPlayed > 0 ? player.totalAccuracy / player.roundsPlayed : 0,
+        averageAccuracy: player.roundsPlayed > 0 ? Math.round((player.totalAccuracy / player.roundsPlayed) * 1000) / 1000 : 0,
         roundsPlayed: player.roundsPlayed,
+        totalAccuracy: Math.round(player.totalAccuracy * 1000) / 1000,
       });
     }
     
     leaderboard.sort((a, b) => b.averageAccuracy - a.averageAccuracy);
-    
     return leaderboard;
   }
 
@@ -346,30 +365,30 @@ class RoomManager {
     return false;
   }
 
-  // Reset room for next round or game end
-resetForNextRound(roomCode: string): Room | null {
-  const room = this.rooms.get(roomCode);
-  if (!room) return null;
-  
-  if (this.shouldEndGame(room)) {
-    room.phase = 'ended';
+  // Reset room for next round (increments round counter, keeps stats)
+  advanceToNextRound(roomCode: string): Room | null {
+    const room = this.rooms.get(roomCode);
+    if (!room) return null;
+    
+    if (this.shouldEndGame(room)) {
+      room.phase = 'ended';
+      return room;
+    }
+    
+    // Increment round counter for next round
+    room.currentRound++;
+    room.phase = 'waiting';
+    room.playAgainVotes.clear();
+    room.roundResults.clear();
+    
+    // Reset player statuses to 'waiting' (not ready)
+    // IMPORTANT: Do NOT reset totalAccuracy or roundsPlayed
+    for (const player of room.players.values()) {
+      player.status = 'waiting';
+    }
+    
     return room;
   }
-  
-  // Move to next round but set phase to waiting
-  room.currentRound++;
-  room.phase = 'waiting';
-  room.playAgainVotes.clear();
-  room.roundResults.clear();
-  
-  // Reset player statuses to 'waiting' (not ready)
-  for (const player of room.players.values()) {
-    player.status = 'waiting';
-    // Don't reset total accuracy or rounds played - keep for overall leaderboard
-  }
-  
-  return room;
-}
 
   // Vote for play again
   votePlayAgain(roomCode: string, socketId: string): { room: Room; allVoted: boolean } | null {
@@ -383,25 +402,25 @@ resetForNextRound(roomCode: string): Room | null {
     return { room, allVoted };
   }
 
-  // Reset room for new game after play again
-resetForNewGame(roomCode: string): Room | null {
-  const room = this.rooms.get(roomCode);
-  if (!room) return null;
-  
-  room.phase = 'waiting';
-  room.currentRound = 0;
-  room.roundResults.clear();
-  room.playAgainVotes.clear();
-  
-  for (const player of room.players.values()) {
-    player.status = 'waiting';
-    player.totalAccuracy = 0;
-    player.roundsPlayed = 0;
-    player.currentAccuracy = undefined;
+  // Reset room for new game after play again vote
+  resetForNewGame(roomCode: string): Room | null {
+    const room = this.rooms.get(roomCode);
+    if (!room) return null;
+    
+    room.phase = 'waiting';
+    room.currentRound = 0;
+    room.roundResults.clear();
+    room.playAgainVotes.clear();
+    
+    for (const player of room.players.values()) {
+      player.status = 'waiting';
+      player.totalAccuracy = 0;
+      player.roundsPlayed = 0;
+      player.currentAccuracy = undefined;
+    }
+    
+    return room;
   }
-  
-  return room;
-}
 
   // Handle player disconnect
   handleDisconnect(socketId: string): { roomCode: string | null; player: Player | null } {
@@ -488,7 +507,7 @@ resetForNewGame(roomCode: string): Room | null {
     return null;
   }
 
-  // End session (host only)
+  // End session (host only) - resets everything but keeps room
   endSession(roomCode: string): Room | null {
     const room = this.rooms.get(roomCode);
     if (!room) return null;

@@ -1,69 +1,63 @@
 import { Server, Socket } from 'socket.io';
 import { roomManager } from './roomManager.js';
 import { CreateRoomInput, JoinRoomInput, SubmitColorInput, RoomConfig } from './types.js';
-import { GameService } from '../services/game.service.js';
 
-// Timer intervals for game phases
+// Timer maps
 const roundTimers: Map<string, NodeJS.Timeout> = new Map();
-const roundEndTimers: Map<string, NodeJS.Timeout> = new Map(); // Track end round timers separately
+const roundEndTimers: Map<string, NodeJS.Timeout> = new Map();
 
 export function setupSocketHandlers(io: Server, socket: Socket) {
   
   // Create room
-// Create room - with defaults
-socket.on('create_room', async (data: CreateRoomInput) => {
-  try {
-    const { username, userId, config } = data;
-    
-    // Apply defaults for missing values
-    const fullConfig: RoomConfig = {
-      roundTimeSeconds: config.roundTimeSeconds ?? 20,      // Default: 20s
-      colorTimeSeconds: config.colorTimeSeconds ?? 3,       // Default: 3s
-      difficulty: config.difficulty ?? 'medium',            // Default: medium
-      specificRounds: config.specificRounds ?? null,        // Default: null (unlimited)
-      maxPlayers: config.maxPlayers ?? 4,                   // Default: 4
-    };
-    
-    // Validate ranges
-    if (fullConfig.roundTimeSeconds < 10 || fullConfig.roundTimeSeconds > 40) {
-      socket.emit('error', { message: 'Round time must be between 10 and 40 seconds' });
-      return;
+  socket.on('create_room', async (data: CreateRoomInput) => {
+    try {
+      const { username, userId, config } = data;
+      
+      const fullConfig: RoomConfig = {
+        roundTimeSeconds: config.roundTimeSeconds ?? 20,
+        colorTimeSeconds: config.colorTimeSeconds ?? 3,
+        difficulty: config.difficulty ?? 'medium',
+        specificRounds: config.specificRounds ?? null,
+        maxPlayers: config.maxPlayers ?? 4,
+      };
+      
+      // Validate ranges
+      if (fullConfig.roundTimeSeconds < 10 || fullConfig.roundTimeSeconds > 40) {
+        socket.emit('error', { message: 'Round time must be between 10 and 40 seconds' });
+        return;
+      }
+      if (fullConfig.colorTimeSeconds < 0.5 || fullConfig.colorTimeSeconds > 7) {
+        socket.emit('error', { message: 'Color time must be between 0.5 and 7 seconds' });
+        return;
+      }
+      if (fullConfig.maxPlayers < 2 || fullConfig.maxPlayers > 4) {
+        socket.emit('error', { message: 'Max players must be between 2 and 4' });
+        return;
+      }
+      if (fullConfig.specificRounds !== null && (fullConfig.specificRounds < 1 || fullConfig.specificRounds > 50)) {
+        socket.emit('error', { message: 'Specific rounds must be between 1 and 50' });
+        return;
+      }
+      
+      const room = roomManager.createRoom(socket.id, userId, username, fullConfig);
+      socket.join(room.code);
+      
+      socket.emit('room_created', {
+        code: room.code,
+        config: room.config,
+        players: Array.from(room.players.values()).map(p => ({
+          socketId: p.socketId,
+          username: p.username,
+          isHost: p.isHost,
+          status: p.status,
+        })),
+        hostSocketId: socket.id,
+      });
+      
+    } catch (error) {
+      socket.emit('error', { message: (error as Error).message });
     }
-    
-    if (fullConfig.colorTimeSeconds < 0.5 || fullConfig.colorTimeSeconds > 7) {
-      socket.emit('error', { message: 'Color time must be between 0.5 and 7 seconds' });
-      return;
-    }
-    
-    if (fullConfig.maxPlayers < 2 || fullConfig.maxPlayers > 4) {
-      socket.emit('error', { message: 'Max players must be between 2 and 4' });
-      return;
-    }
-    
-    if (fullConfig.specificRounds !== null && (fullConfig.specificRounds < 1 || fullConfig.specificRounds > 50)) {
-      socket.emit('error', { message: 'Specific rounds must be between 1 and 50' });
-      return;
-    }
-    
-    const room = roomManager.createRoom(socket.id, userId, username, fullConfig);
-    
-    socket.join(room.code);
-    
-    socket.emit('room_created', {
-      code: room.code,
-      config: room.config,
-      players: Array.from(room.players.values()).map(p => ({
-        socketId: p.socketId,
-        username: p.username,
-        isHost: p.isHost,
-        status: p.status,
-      })),
-      hostSocketId: socket.id,
-    });
-  } catch (error) {
-    socket.emit('error', { message: (error as Error).message });
-  }
-});
+  });
   
   // Join room
   socket.on('join_room', async (data: JoinRoomInput) => {
@@ -71,7 +65,6 @@ socket.on('create_room', async (data: CreateRoomInput) => {
       const { code, username, userId } = data;
       
       const room = roomManager.joinRoom(code, socket.id, userId, username);
-      
       if (!room) {
         socket.emit('error', { message: 'Room not found' });
         return;
@@ -79,7 +72,6 @@ socket.on('create_room', async (data: CreateRoomInput) => {
       
       socket.join(code);
       
-      // Notify all players in room
       io.to(code).emit('player_joined', {
         username,
         players: Array.from(room.players.values()).map(p => ({
@@ -102,6 +94,7 @@ socket.on('create_room', async (data: CreateRoomInput) => {
         hostSocketId: Array.from(room.players.values()).find(p => p.isHost)?.socketId,
         status: room.phase,
       });
+      
     } catch (error) {
       socket.emit('error', { message: (error as Error).message });
     }
@@ -110,11 +103,8 @@ socket.on('create_room', async (data: CreateRoomInput) => {
   // Leave room
   socket.on('leave_room', () => {
     const { roomCode, newHostSocketId } = roomManager.leaveRoom(socket.id);
-    
     if (roomCode) {
       socket.leave(roomCode);
-      
-      // Clear any timers for this room
       clearRoomTimers(roomCode);
       
       if (newHostSocketId) {
@@ -136,7 +126,6 @@ socket.on('create_room', async (data: CreateRoomInput) => {
         hostSocketId: newHostSocketId,
       });
     }
-    
     socket.emit('left_room', { success: true });
   });
   
@@ -144,6 +133,18 @@ socket.on('create_room', async (data: CreateRoomInput) => {
   socket.on('player_ready', () => {
     const room = roomManager.getRoomBySocketId(socket.id);
     if (!room) return;
+    
+    // Don't allow ready if game is ended (waiting for play again)
+    if (room.phase === 'ended') {
+      socket.emit('error', { message: 'Game has ended. Please click "Play Again" to start a new game.' });
+      return;
+    }
+    
+    // Don't allow ready if game is in progress
+    if (room.phase !== 'waiting' && room.phase !== 'results') {
+      socket.emit('error', { message: 'Cannot ready during active round' });
+      return;
+    }
     
     roomManager.setPlayerReady(socket.id, true);
     
@@ -158,9 +159,19 @@ socket.on('create_room', async (data: CreateRoomInput) => {
       })),
     });
     
-    // Check if all ready and start countdown
+    // Check if all ready
     if (roomManager.areAllPlayersReady(room) && room.players.size >= 2) {
-      startCountdown(io, room.code);
+      // Determine if this is a new game or next round
+      if (room.currentRound === 0) {
+        // New game
+        startCountdownForNewGame(io, room.code);
+      } else if (room.phase === 'waiting' && room.currentRound > 0) {
+        // Next round (game already started)
+        startCountdownForNextRound(io, room.code);
+      } else if (room.phase === 'results' && room.currentRound > 0) {
+        // This case shouldn't happen, but handle it
+        startCountdownForNextRound(io, room.code);
+      }
     }
   });
   
@@ -186,7 +197,6 @@ socket.on('create_room', async (data: CreateRoomInput) => {
   // Submit color
   socket.on('submit_color', async (data: SubmitColorInput) => {
     const { roomCode, userId, color } = data;
-    
     const room = roomManager.getRoom(roomCode);
     if (!room) return;
     
@@ -202,23 +212,27 @@ socket.on('create_room', async (data: CreateRoomInput) => {
       totalPlayers,
     });
     
-    // Check if round is complete (all players submitted)
+    // Check if round is complete
     if (room.roundResults.size === totalPlayers) {
-      // Clear the round end timer if it exists
       const endTimer = roundEndTimers.get(roomCode);
       if (endTimer) {
         clearTimeout(endTimer);
         roundEndTimers.delete(roomCode);
       }
-      // End round immediately
       endRound(io, roomCode);
     }
   });
   
-  // Play again
+  // Play again (only after game ended)
   socket.on('play_again', () => {
     const room = roomManager.getRoomBySocketId(socket.id);
     if (!room) return;
+    
+    // Only allow play again when game ended
+    if (room.phase !== 'ended') {
+      socket.emit('error', { message: 'Game not ended yet' });
+      return;
+    }
     
     const result = roomManager.votePlayAgain(room.code, socket.id);
     if (!result) return;
@@ -233,10 +247,7 @@ socket.on('create_room', async (data: CreateRoomInput) => {
     });
     
     if (allVoted) {
-      // Clear any existing timers
       clearRoomTimers(room.code);
-      
-      // Reset for new game
       roomManager.resetForNewGame(room.code);
       io.to(room.code).emit('room_reset', {
         players: Array.from(updatedRoom.players.values()).map(p => ({
@@ -261,15 +272,10 @@ socket.on('create_room', async (data: CreateRoomInput) => {
       return;
     }
     
-    // Clear all timers
     clearRoomTimers(room.code);
-    
     roomManager.endSession(room.code);
     
-    io.to(room.code).emit('session_ended', {
-      message: 'Host ended the session',
-    });
-    
+    io.to(room.code).emit('session_ended', { message: 'Host ended the session' });
     io.to(room.code).emit('room_reset', {
       players: Array.from(room.players.values()).map(p => ({
         socketId: p.socketId,
@@ -299,7 +305,6 @@ socket.on('create_room', async (data: CreateRoomInput) => {
   // Disconnect
   socket.on('disconnect', () => {
     const { roomCode, player } = roomManager.handleDisconnect(socket.id);
-    
     if (roomCode && player) {
       io.to(roomCode).emit('player_left', {
         socketId: socket.id,
@@ -313,10 +318,8 @@ socket.on('create_room', async (data: CreateRoomInput) => {
           })) : [],
       });
       
-      // Check if room should be dissolved (less than 2 players)
       const room = roomManager.getRoom(roomCode);
       if (room && room.players.size < 2) {
-        // Clear timers before dissolving
         clearRoomTimers(roomCode);
         io.to(roomCode).emit('room_dissolved', { message: 'Not enough players' });
       }
@@ -326,45 +329,80 @@ socket.on('create_room', async (data: CreateRoomInput) => {
 
 // Helper: Clear all timers for a room
 function clearRoomTimers(roomCode: string) {
-  const memorizationTimer = roundTimers.get(roomCode);
-  if (memorizationTimer) {
-    clearTimeout(memorizationTimer);
+  const timer1 = roundTimers.get(roomCode);
+  if (timer1) {
+    clearTimeout(timer1);
     roundTimers.delete(roomCode);
   }
-  
-  const reconstructionTimer = roundEndTimers.get(roomCode);
-  if (reconstructionTimer) {
-    clearTimeout(reconstructionTimer);
+  const timer2 = roundEndTimers.get(roomCode);
+  if (timer2) {
+    clearTimeout(timer2);
     roundEndTimers.delete(roomCode);
   }
 }
 
-// Start countdown before game
-function startCountdown(io: Server, roomCode: string) {
+// Countdown for NEW GAME (resets stats)
+function startCountdownForNewGame(io: Server, roomCode: string) {
   let countdown = 3;
-  
   const interval = setInterval(() => {
     io.to(roomCode).emit('all_ready_countdown', { countdown });
     countdown--;
-    
     if (countdown < 0) {
       clearInterval(interval);
-      startGame(io, roomCode);
+      startNewGame(io, roomCode);
     }
   }, 1000);
 }
 
-// Start the game
-function startGame(io: Server, roomCode: string) {
-  const room = roomManager.startGame(roomCode);
-  if (!room) return;
-  
-  startRound(io, roomCode);
+// Countdown for NEXT ROUND (preserves stats)
+function startCountdownForNextRound(io: Server, roomCode: string) {
+  let countdown = 3;
+  const interval = setInterval(() => {
+    io.to(roomCode).emit('all_ready_countdown', { countdown });
+    countdown--;
+    if (countdown < 0) {
+      clearInterval(interval);
+      startNextRound(io, roomCode);
+    }
+  }, 1000);
 }
 
-// Start a round
-function startRound(io: Server, roomCode: string) {
-  const result = roomManager.startRound(roomCode);
+// Start a brand new game (first round)
+function startNewGame(io: Server, roomCode: string) {
+  const room = roomManager.startNewGame(roomCode);
+  if (!room) {
+    console.error(`[Game] Failed to start new game in room ${roomCode}`);
+    return;
+  }
+  
+  
+  // Start the first round
+  const result = roomManager.startNextRound(roomCode);
+  if (!result) {
+    console.error(`[Game] Failed to start first round in room ${roomCode}`);
+    return;
+  }
+  
+  const { room: updatedRoom, color } = result;
+  
+  io.to(roomCode).emit('round_started', {
+    round: updatedRoom.currentRound,
+    totalRounds: updatedRoom.totalRounds,
+    color,
+    colorDuration: updatedRoom.config.colorTimeSeconds,
+    roundDuration: updatedRoom.config.roundTimeSeconds,
+  });
+  
+  // Set timer for memorization phase
+  const memorizationTimer = setTimeout(() => {
+    startReconstruction(io, roomCode);
+  }, updatedRoom.config.colorTimeSeconds * 1000);
+  roundTimers.set(roomCode, memorizationTimer);
+}
+
+// Start the next round (preserving stats)
+function startNextRound(io: Server, roomCode: string) {
+  const result = roomManager.startNextRound(roomCode);
   if (!result) return;
   
   const { room, color } = result;
@@ -381,7 +419,6 @@ function startRound(io: Server, roomCode: string) {
   const memorizationTimer = setTimeout(() => {
     startReconstruction(io, roomCode);
   }, room.config.colorTimeSeconds * 1000);
-  
   roundTimers.set(roomCode, memorizationTimer);
 }
 
@@ -394,11 +431,17 @@ function startReconstruction(io: Server, roomCode: string) {
     roundDuration: room.config.roundTimeSeconds,
   });
   
-  // Set timer for round end - store in roundEndTimers
+  // Clear memorization timer
+  const memTimer = roundTimers.get(roomCode);
+  if (memTimer) {
+    clearTimeout(memTimer);
+    roundTimers.delete(roomCode);
+  }
+  
+  // Set timer for round end
   const reconstructionTimer = setTimeout(() => {
     endRound(io, roomCode);
   }, room.config.roundTimeSeconds * 1000);
-  
   roundEndTimers.set(roomCode, reconstructionTimer);
 }
 
@@ -423,56 +466,36 @@ function endRound(io: Server, roomCode: string) {
     leaderboard,
   });
   
+  
   // Check if game should end
   if (roomManager.shouldEndGame(room)) {
-    // Game ended - show final results, then wait for play again
+    // Game ended
     io.to(roomCode).emit('game_ended', {
       finalLeaderboard: roomManager.getRoomLeaderboard(room),
     });
     
-    // Reset to waiting state but keep room for play again
-    setTimeout(() => {
-      const currentRoom = roomManager.getRoom(roomCode);
-      if (currentRoom && currentRoom.phase === 'ended') {
-        roomManager.endSession(roomCode);
-        io.to(roomCode).emit('room_reset', {
-          players: Array.from(currentRoom.players.values()).map(p => ({
-            socketId: p.socketId,
-            username: p.username,
-            isHost: p.isHost,
-            status: 'waiting',
-          })),
-          status: 'waiting',
-        });
-      }
-    }, 3000); // Wait 3 seconds before resetting
-  } else {
-    // Prepare for next round - wait 5 seconds before starting next round
+    // Mark as ended so players cannot ready, only play again
     setTimeout(() => {
       const currentRoom = roomManager.getRoom(roomCode);
       if (currentRoom && currentRoom.phase === 'results') {
-        const nextRoom = roomManager.resetForNextRound(roomCode);
-        if (nextRoom && nextRoom.phase === 'waiting') {
-          // All players are now in waiting state - they need to ready up again
+        currentRoom.phase = 'ended';
+        io.to(roomCode).emit('game_ended_ready', { message: 'Click Play Again to start a new game' });
+      }
+    }, 3000);
+  } else {
+    // Prepare for next round - show results, then wait for players to ready
+    setTimeout(() => {
+      const currentRoom = roomManager.getRoom(roomCode);
+      if (currentRoom && currentRoom.phase === 'results') {
+        // Advance to next round (increment counter, set to waiting)
+        const nextRoom = roomManager.advanceToNextRound(roomCode);
+        if (nextRoom) {
           io.to(roomCode).emit('round_interval', {
-            message: 'Next round starting soon. Get ready!',
-            nextRound: nextRoom.currentRound + 1,
+            message: `Round ${nextRoom.currentRound} starting soon. Get ready!`,
+            nextRound: nextRoom.currentRound,
           });
-          
-          // Don't auto-start next round - wait for players to ready
-          // Players must click "Ready" again for next round
         }
       }
-    }, 5000); // 5 second break between rounds
-  }
-}
-
-// Helper: Check if all players are ready for next round
-function checkAllReadyForNextRound(io: Server, roomCode: string) {
-  const room = roomManager.getRoom(roomCode);
-  if (!room) return;
-  
-  if (roomManager.areAllPlayersReady(room) && room.players.size >= 2) {
-    startCountdown(io, roomCode);
+    }, 5000); // 5 second break
   }
 }
