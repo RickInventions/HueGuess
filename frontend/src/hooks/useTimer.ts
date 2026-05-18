@@ -17,7 +17,12 @@ export function useTimer({ duration, onExpire, onTick, autoStart = true, isUrgen
   const lastTickRef = useRef<number>(0);
   const hasExpiredRef = useRef<boolean>(false);
 
-  // Clear interval function
+  // Store callbacks in refs so they never cause the interval effect to restart
+  const onExpireRef = useRef(onExpire);
+  const onTickRef = useRef(onTick);
+  useEffect(() => { onExpireRef.current = onExpire; }, [onExpire]);
+  useEffect(() => { onTickRef.current = onTick; }, [onTick]);
+
   const clearTimer = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -25,58 +30,53 @@ export function useTimer({ duration, onExpire, onTick, autoStart = true, isUrgen
     }
   }, []);
 
-  // Start timer
   const start = useCallback(() => {
+    if (timeRemaining <= 0) return;
     clearTimer();
     setIsActive(true);
     hasExpiredRef.current = false;
-  }, [clearTimer]);
+  }, [clearTimer, timeRemaining]);
 
-  // Pause timer
   const pause = useCallback(() => {
     clearTimer();
     setIsActive(false);
   }, [clearTimer]);
 
-  // Reset timer
-const reset = useCallback((newDuration?: number) => {
-  const newTime = newDuration ?? duration
-  clearTimer()
+  const reset = useCallback((newDuration?: number) => {
+    const newTime = newDuration ?? duration;
+    clearTimer();
+    setTimeRemaining(newTime);
+    setIsActive(false);
+    setIsUrgent(false);
+    hasExpiredRef.current = false;
+    lastTickRef.current = 0;
+  }, [duration, clearTimer]);
 
-  setTimeRemaining(newTime)
-  setIsActive(false)
-  setIsUrgent(false)
-  hasExpiredRef.current = false
-  lastTickRef.current = 0
-}, [duration, clearTimer])
-
-  // Main timer effect
+  // Main timer effect — intentionally excludes onExpire/onTick/timeRemaining from deps
+  // to prevent the interval from being torn down and recreated on every slider interaction.
+  // Callbacks are accessed via refs so they always call the latest version.
   useEffect(() => {
     if (!isActive) return;
-    
-    // Don't start if time is 0 or less
+
     if (timeRemaining <= 0) {
       if (!hasExpiredRef.current) {
         hasExpiredRef.current = true;
-        onExpire?.();
+        onExpireRef.current?.();
       }
       clearTimer();
       return;
     }
-    
+
     intervalRef.current = setInterval(() => {
       setTimeRemaining(prev => {
         const newTime = prev - 1;
-        
-        // Call onTick callback
-        onTick?.(newTime);
-        
-        // Check for urgency
+
+        onTickRef.current?.(newTime);
+
         if (newTime <= isUrgentAt && newTime > 0) {
           setIsUrgent(true);
         }
-        
-        // Play tick sounds (only once per second)
+
         if (newTime <= 10 && newTime > 0 && lastTickRef.current !== newTime) {
           if (newTime <= 5) {
             soundService.playUrgentTick();
@@ -85,31 +85,30 @@ const reset = useCallback((newDuration?: number) => {
           }
           lastTickRef.current = newTime;
         }
-        
-        // Check for expiration
+
         if (newTime <= 0) {
           clearTimer();
           setIsActive(false);
           if (!hasExpiredRef.current) {
             hasExpiredRef.current = true;
-            onExpire?.();
+            onExpireRef.current?.();
           }
           return 0;
         }
-        
+
         return newTime;
       });
     }, 1000);
-    
+
     return clearTimer;
-  }, [isActive, onExpire, onTick, isUrgentAt, clearTimer]);
+  }, [isActive, isUrgentAt, clearTimer]); // ✅ onExpire/onTick/timeRemaining intentionally omitted
 
   // Cleanup on unmount
   useEffect(() => {
     return clearTimer;
   }, [clearTimer]);
 
-  // Update timeRemaining when duration changes
+  // Update timeRemaining when duration changes (but only if not active)
   useEffect(() => {
     if (!isActive) {
       setTimeRemaining(duration);

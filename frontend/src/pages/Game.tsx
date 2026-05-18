@@ -25,10 +25,6 @@ export default function Game() {
     initialDifficulty || null
   )
   const [showDifficultySelect, setShowDifficultySelect] = useState(!initialDifficulty)
-  
-  // Refs to track timer states
-  const memPhaseRef = useRef(false)
-  const reconPhaseRef = useRef(false)
 
   // Game hook integration
   const {
@@ -44,6 +40,7 @@ export default function Game() {
     isSubmitting,
     generateRound,
     submitGuess,
+    submitTimeout,
     resetGame,
   } = useGame({
     mode,
@@ -56,69 +53,67 @@ export default function Game() {
     },
   })
 
-  // Update refs when phase changes
-  useEffect(() => {
-    memPhaseRef.current = phase === 'memorization'
-    reconPhaseRef.current = phase === 'reconstruction'
-  }, [phase])
+  // Keep latest values in refs so timer callbacks don't go stale
+  const phaseRef = useRef(phase)
+  const configRef = useRef(config)
+  useEffect(() => { phaseRef.current = phase }, [phase])
+  useEffect(() => { configRef.current = config }, [config])
+
+  // Stable onExpire callbacks that read from refs — these never change identity,
+  // so they won't cause useTimer's interval to restart on re-renders.
+  const handleMemExpire = useCallback(() => {
+    if (phaseRef.current === 'memorization') {
+      soundService.playMemorizationEnd()
+      setPhase('reconstruction')
+      reconTimer.reset(configRef.current?.roundTimeSeconds || 35)
+      reconTimer.start()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // intentionally empty — reads phase/config via refs
+
+  const handleReconExpire = useCallback(() => {
+    if (phaseRef.current === 'reconstruction') {
+      submitTimeout()
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitTimeout])
 
   // Timer for memorization phase
   const memTimer = useTimer({
     duration: config?.colorTimeSeconds || 6,
     autoStart: false,
-    onExpire: () => {
-      if (memPhaseRef.current) {
-        soundService.playMemorizationEnd()
-        setPhase('reconstruction')
-      reconTimer.reset(config.roundTimeSeconds)
-      reconTimer.start()
-      }
-      
-    },
+    onExpire: handleMemExpire,
   })
 
   // Timer for reconstruction phase
   const reconTimer = useTimer({
     duration: config?.roundTimeSeconds || 35,
     autoStart: false,
-    onExpire: () => {
-      if (reconPhaseRef.current && currentColor && selectedDifficulty) {
-        const memorizationSeconds = config?.colorTimeSeconds || 6
-        submitGuess(selectedDifficulty, currentColor, userColor, memorizationSeconds)
-          .catch(console.error)
-      }
-    },
+    onExpire: handleReconExpire,
   })
 
-
   // Start a new round
-const startRound = useCallback(async (difficulty: Difficulty) => {
-  try {
-    const data = await generateRound(difficulty)
-
-    setPhase('memorization')
-
-    soundService.playRoundStart()
-
-    // 🔥 START TIMER HERE (guaranteed config exists)
-    memTimer.reset(data.config.colorTimeSeconds)
-    memTimer.start()
-
-  } catch (error) {
-    console.error('Failed to start round:', error)
-  }
-}, [generateRound, setPhase, memTimer])
+  const startRound = useCallback(async (difficulty: Difficulty) => {
+    try {
+      const data = await generateRound(difficulty)
+      setPhase('memorization')
+      soundService.playRoundStart()
+      memTimer.reset(data.config.colorTimeSeconds)
+      memTimer.start()
+    } catch (error) {
+      console.error('Failed to start round:', error)
+    }
+  }, [generateRound, setPhase, memTimer])
 
   // Handle difficulty selection
   const handleDifficultySelect = useCallback(async (difficulty: Difficulty) => {
     setSelectedDifficulty(difficulty)
     setShowDifficultySelect(false)
-    
-    // Update URL without reload
+
     const params = new URLSearchParams(searchParams)
     params.set('difficulty', difficulty)
     navigate(`/play?${params.toString()}`, { replace: true })
-    
+
     await startRound(difficulty)
   }, [navigate, searchParams, startRound])
 
@@ -128,11 +123,10 @@ const startRound = useCallback(async (difficulty: Difficulty) => {
       navigate('/verify')
       return
     }
-    
+
     resetGame()
     setShowDifficultySelect(true)
     setSelectedDifficulty(null)
-    // Clear URL difficulty param
     navigate('/play', { replace: true })
   }, [mode, isVerified, resetGame, navigate])
 
@@ -159,29 +153,47 @@ const startRound = useCallback(async (difficulty: Difficulty) => {
   // Handle submit
   const handleSubmit = useCallback(async () => {
     if (!selectedDifficulty || !currentColor || isSubmitting) return
-    
+    if (phase !== 'reconstruction') return
+
     const memorizationSeconds = config?.colorTimeSeconds || 6
-    
+
     try {
       reconTimer.pause()
       await submitGuess(selectedDifficulty, currentColor, userColor, memorizationSeconds)
     } catch (error) {
       console.error('Submit failed:', error)
     }
-  }, [selectedDifficulty, currentColor, userColor, isSubmitting, config, submitGuess, reconTimer])
+  }, [selectedDifficulty, currentColor, userColor, isSubmitting, config, submitGuess, reconTimer, phase])
 
-  // Initial load for casual mode - start with Easy by default
+  // Keyboard submit (Enter/Space)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (phase === 'reconstruction' && !isSubmitting && selectedDifficulty && currentColor) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          handleSubmit()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [phase, isSubmitting, selectedDifficulty, currentColor, handleSubmit])
+
+  // Initial load for casual mode
   useEffect(() => {
     if (mode === 'casual' && !selectedDifficulty && !showDifficultySelect && !currentColor) {
       handleDifficultySelect('easy')
     }
   }, [mode, selectedDifficulty, showDifficultySelect, currentColor, handleDifficultySelect])
 
-  // Determine timer props
+  // Determine active timer
   const activeTimer = phase === 'memorization' ? memTimer : reconTimer
-  const timerLabel = phase === 'memorization' 
+  const timerLabel = phase === 'memorization'
     ? `Memorize · ${config?.colorTimeSeconds || 6}s`
     : `Reconstruct · ${config?.roundTimeSeconds || 35}s`
+
+  const isLoading = !currentColor && !result && !showDifficultySelect && phase !== 'result'
 
   return (
     <div className="max-w-game mx-auto px-4 py-6 space-y-6">
@@ -207,6 +219,16 @@ const startRound = useCallback(async (difficulty: Difficulty) => {
         </div>
       </div>
 
+      {/* Loading state */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-20">
+          <div className="text-center space-y-4">
+            <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+            <p className="text-muted text-sm">Loading color...</p>
+          </div>
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
         {/* Difficulty Select */}
         {showDifficultySelect && (
@@ -227,7 +249,7 @@ const startRound = useCallback(async (difficulty: Difficulty) => {
         )}
 
         {/* Game Content */}
-        {!showDifficultySelect && currentColor && (
+        {!showDifficultySelect && currentColor && !isLoading && (
           <motion.div
             key="game-content"
             initial={{ opacity: 0 }}

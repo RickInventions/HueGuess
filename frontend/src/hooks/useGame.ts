@@ -11,7 +11,6 @@ interface UseGameOptions {
 export function useGame({ mode, onGameComplete }: UseGameOptions) {
   const [phase, setPhase] = useState<'memorization' | 'reconstruction' | 'result'>('memorization');
   const [currentColor, setCurrentColor] = useState<HSLColor | null>(null);
-  // ✅ FIX 2: Start with 0 values for all channels
   const [userColor, setUserColor] = useState<HSLColor>({ h: 0, s: 0, l: 0 });
   const [result, setResult] = useState<RoundResult | null>(null);
   const [huePointsUpdate, setHuePointsUpdate] = useState<any>(null);
@@ -27,6 +26,7 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
   
   const startTimeRef = useRef<number>(0);
   const reloadHandledRef = useRef<boolean>(false);
+  const roundIdRef = useRef<string | null>(null);
 
   const generateRound = useCallback(async (difficulty: Difficulty) => {
     try {
@@ -40,10 +40,10 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
       setResult(null);
       setHuePointsUpdate(null);
       setNewlyUnlocked([]);
-      // ✅ FIX 2: Reset to 0 when new round starts
       setUserColor({ h: 0, s: 0, l: 0 });
       startTimeRef.current = Date.now();
       reloadHandledRef.current = false;
+      roundIdRef.current = null;
       
       return data;
     } catch (error) {
@@ -52,6 +52,39 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
     }
   }, []);
 
+  // ✅ FIX 4: Submit 0,0,0 on timeout
+  const submitTimeout = useCallback(async () => {
+    if (!currentDifficulty || !currentColor || isSubmitting) return;
+    if (roundIdRef.current) return; // Already submitted
+    
+    const memorizationSeconds = config?.colorTimeSeconds || 6;
+    
+    setIsSubmitting(true);
+    try {
+      const response = await game.submitGuess(
+        mode,
+        currentDifficulty,
+        currentColor,
+        { h: 0, s: 0, l: 0 }, // ✅ Submit black color for timeout
+        memorizationSeconds
+      );
+      
+      const data = response.data;
+      roundIdRef.current = data.roundId;
+      setResult(data.result);
+      setHuePointsUpdate(data.huePoints || null);
+      setNewlyUnlocked(data.newlyUnlocked || []);
+      setPhase('result');
+      soundService.playExpired();
+      
+      onGameComplete?.(data.result, data.huePoints, data.newlyUnlocked);
+    } catch (error) {
+      console.error('Failed to submit timeout:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [currentDifficulty, currentColor, config, mode, isSubmitting, onGameComplete]);
+
   const submitGuess = useCallback(async (
     difficulty: Difficulty,
     originalColor: HSLColor,
@@ -59,6 +92,8 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
     memorizationSeconds: number
   ) => {
     if (isSubmitting) return;
+    if (roundIdRef.current) return; // Already submitted
+    
     setIsSubmitting(true);
     
     try {
@@ -71,19 +106,18 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
       );
       
       const data = response.data;
+      roundIdRef.current = data.roundId;
       setResult(data.result);
       setHuePointsUpdate(data.huePoints || null);
       setNewlyUnlocked(data.newlyUnlocked || []);
       setPhase('result');
       
-      // Play sound effects
       if (data.result.isNegative) {
         soundService.playNegativeTone();
       } else {
         soundService.playSubmitDing();
       }
       
-      // Play achievement sound
       if (data.newlyUnlocked && data.newlyUnlocked.length > 0) {
         soundService.playAchievementUnlock();
       }
@@ -109,7 +143,6 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
     
     try {
       await game.registerReloadPenalty(mode, difficulty, originalColor, memorizationSeconds);
-      soundService.playExpired();
     } catch (error) {
       console.error('Failed to register reload penalty:', error);
     }
@@ -124,6 +157,8 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
     setConfig(null);
     setCurrentDifficulty(null);
     setUserColor({ h: 0, s: 0, l: 0 });
+    roundIdRef.current = null;
+    reloadHandledRef.current = false;
   }, []);
 
   // Handle page reload during active round
@@ -145,15 +180,12 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
           `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/api/game/reload-penalty`,
           new Blob([payload], { type: 'application/json' })
         );
-        
-        e.preventDefault();
-        e.returnValue = '';
       }
     };
     
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [phase, currentColor, config, mode, currentDifficulty]);
+  }, [phase, currentColor, currentDifficulty, mode]);
 
   return {
     phase,
@@ -169,6 +201,7 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
     currentDifficulty,
     generateRound,
     submitGuess,
+    submitTimeout,
     registerReloadPenalty,
     resetGame,
   };
