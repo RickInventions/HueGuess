@@ -4,16 +4,16 @@ import { Difficulty, GameMode, HSLColor, RoundResult, Achievement } from '../typ
 import { soundService } from '../services/soundService';
 
 interface UseGameOptions {
-  mode: GameMode;
+  mode: 'casual' | 'competitive';
   onGameComplete?: (result: RoundResult, huePoints?: any, achievements?: Achievement[]) => void;
 }
 
 export function useGame({ mode, onGameComplete }: UseGameOptions) {
   const [phase, setPhase] = useState<'memorization' | 'reconstruction' | 'result'>('memorization');
   const [currentColor, setCurrentColor] = useState<HSLColor | null>(null);
-  const [userColor, setUserColor] = useState<HSLColor>({ h: 0, s: 50, l: 50 });
+  // ✅ FIX 2: Start with 0 values for all channels
+  const [userColor, setUserColor] = useState<HSLColor>({ h: 0, s: 0, l: 0 });
   const [result, setResult] = useState<RoundResult | null>(null);
-  const [score, setScore] = useState<number | null>(null);
   const [huePointsUpdate, setHuePointsUpdate] = useState<any>(null);
   const [newlyUnlocked, setNewlyUnlocked] = useState<Achievement[]>([]);
   const [config, setConfig] = useState<{
@@ -23,6 +23,7 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
     roundTimeSeconds: number;
   } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [currentDifficulty, setCurrentDifficulty] = useState<Difficulty | null>(null);
   
   const startTimeRef = useRef<number>(0);
   const reloadHandledRef = useRef<boolean>(false);
@@ -34,12 +35,13 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
       
       setCurrentColor(data.color);
       setConfig(data.config);
+      setCurrentDifficulty(difficulty);
       setPhase('memorization');
       setResult(null);
-      setScore(null);
       setHuePointsUpdate(null);
       setNewlyUnlocked([]);
-      setUserColor({ h: data.color.h, s: data.color.s, l: data.color.l });
+      // ✅ FIX 2: Reset to 0 when new round starts
+      setUserColor({ h: 0, s: 0, l: 0 });
       startTimeRef.current = Date.now();
       reloadHandledRef.current = false;
       
@@ -70,7 +72,6 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
       
       const data = response.data;
       setResult(data.result);
-      setScore(data.result.accuracy);
       setHuePointsUpdate(data.huePoints || null);
       setNewlyUnlocked(data.newlyUnlocked || []);
       setPhase('result');
@@ -117,21 +118,23 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
   const resetGame = useCallback(() => {
     setPhase('memorization');
     setResult(null);
-    setScore(null);
     setHuePointsUpdate(null);
     setNewlyUnlocked([]);
+    setCurrentColor(null);
+    setConfig(null);
+    setCurrentDifficulty(null);
+    setUserColor({ h: 0, s: 0, l: 0 });
   }, []);
 
   // Handle page reload during active round
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if ((phase === 'memorization' || phase === 'reconstruction') && currentColor && config) {
+      if ((phase === 'memorization' || phase === 'reconstruction') && currentColor && currentDifficulty) {
         const memorizationSeconds = Math.floor((Date.now() - startTimeRef.current) / 1000);
         
-        // Use sendBeacon for reliable delivery during page unload
         const payload = JSON.stringify({
           mode,
-          difficulty: 'medium', // You'd need to track current difficulty
+          difficulty: currentDifficulty,
           originalH: currentColor.h,
           originalS: currentColor.s,
           originalL: currentColor.l,
@@ -150,23 +153,23 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
     
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [phase, currentColor, config, mode]);
+  }, [phase, currentColor, config, mode, currentDifficulty]);
 
   return {
     phase,
+    setPhase,
     currentColor,
     userColor,
     setUserColor,
     result,
-    score,
     huePointsUpdate,
     newlyUnlocked,
     config,
     isSubmitting,
+    currentDifficulty,
     generateRound,
     submitGuess,
     registerReloadPenalty,
     resetGame,
-    setPhase,
   };
 }

@@ -1,22 +1,30 @@
 import { Slider } from '../ui/Slider'
-import type { ColorHSL } from '../../types'
+import type { HSLColor } from '../../types'
 
 interface ColorSlidersProps {
-  color: ColorHSL
+  color: HSLColor
   onChange: (channel: 'h' | 's' | 'l', value: number) => void
+  onSubmit?: () => void
   disabled?: boolean
 }
 
-export function ColorSliders({ color, onChange }: ColorSlidersProps) {
+export function ColorSliders({ color, onChange, onSubmit, disabled }: ColorSlidersProps) {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (onSubmit && (e.key === 'Enter' || e.key === ' ') && !disabled) {
+      e.preventDefault()
+      onSubmit()
+    }
+  }
+
   return (
-    <div className="space-y-5 w-full">
-      {/* Preview block — the color the user is building */}
+    <div className="space-y-5 w-full" onKeyDown={handleKeyDown}>
+      {/* Preview block */}
       <div
         className="w-full h-24 rounded-xl border border-border shadow-sm transition-colors duration-100"
         style={{ backgroundColor: `hsl(${color.h}, ${color.s}%, ${color.l}%)` }}
       />
 
-      {/* Hue slider — rainbow track */}
+      {/* Hue slider */}
       <Slider
         label="Hue"
         value={color.h}
@@ -37,7 +45,7 @@ export function ColorSliders({ color, onChange }: ColorSlidersProps) {
         }}
       />
 
-      {/* Saturation slider — dynamic track based on current hue + lightness */}
+      {/* Saturation slider */}
       <Slider
         label="Saturation"
         value={color.s}
@@ -53,7 +61,7 @@ export function ColorSliders({ color, onChange }: ColorSlidersProps) {
         }}
       />
 
-      {/* Lightness slider — dynamic track based on current hue + saturation */}
+      {/* Lightness slider */}
       <Slider
         label="Lightness"
         value={color.l}
@@ -69,6 +77,14 @@ export function ColorSliders({ color, onChange }: ColorSlidersProps) {
           )`,
         }}
       />
+
+      {/* Keyboard hint */}
+      {onSubmit && (
+        <p className="text-center text-xs text-muted mt-2">
+          Press <kbd className="px-1.5 py-0.5 bg-surface-alt rounded text-xs">Enter</kbd> or{' '}
+          <kbd className="px-1.5 py-0.5 bg-surface-alt rounded text-xs">Space</kbd> to submit
+        </p>
+      )}
     </div>
   )
 }

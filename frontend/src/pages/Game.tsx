@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, RefreshCw, Home, AlertTriangle, Clock } from 'lucide-react'
+import { ArrowLeft, RefreshCw, Home } from 'lucide-react'
 import { useGame } from '../hooks/useGame'
 import { useTimer } from '../hooks/useTimer'
 import { useAuth } from '../context/AuthContext'
@@ -10,139 +10,185 @@ import { ColorSliders } from '../components/game/ColorSliders'
 import { TimerBar } from '../components/game/TimerBar'
 import { ResultCard } from '../components/game/ResultCard'
 import { DifficultySelect } from '../components/game/DifficultySelect'
-import { Button } from '../components/ui/Button'
-import type { GameMode, Difficulty } from '../types'
-import api from '../lib/api'
-
-const TOTAL_GAME_SECONDS = 30
+import { soundService } from '../services/soundService'
+import type { Difficulty } from '../types'
 
 export default function Game() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { isVerified } = useAuth()
 
-  const initialMode = (searchParams.get('mode') || 'casual') as GameMode
+  const mode = (searchParams.get('mode') || 'casual') as 'casual' | 'competitive'
   const initialDifficulty = searchParams.get('difficulty') as Difficulty | null
 
-  const [mode] = useState<GameMode>(initialMode)
   const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty | null>(
-    initialDifficulty || (mode === 'competitive' ? null : null)
+    initialDifficulty || null
   )
-  const [showDifficultySelect, setShowDifficultySelect] = useState(
-    mode === 'competitive' && !initialDifficulty
-  )
-  const [unlockedDifficulties, setUnlockedDifficulties] = useState<string[]>(['easy', 'medium'])
-  const [currentTier, setCurrentTier] = useState<string>('Bronze')
+  const [showDifficultySelect, setShowDifficultySelect] = useState(!initialDifficulty)
+  
+  // Refs to track timer states
+  const memPhaseRef = useRef(false)
+  const reconPhaseRef = useRef(false)
 
-  // Fetch difficulty access for competitive
+  // Game hook integration
+  const {
+    phase,
+    setPhase,
+    currentColor,
+    userColor,
+    setUserColor,
+    result,
+    huePointsUpdate,
+    newlyUnlocked,
+    config,
+    isSubmitting,
+    generateRound,
+    submitGuess,
+    resetGame,
+  } = useGame({
+    mode,
+    onGameComplete: (res, huePoints, achievements) => {
+      if (achievements?.length) {
+        achievements.forEach(() => {
+          soundService.playAchievementUnlock()
+        })
+      }
+    },
+  })
+
+  // Update refs when phase changes
   useEffect(() => {
-    if (mode !== 'competitive' || !user) return
-    
-    api.difficultyCheck('hard')
-      .then((data) => {
-        setUnlockedDifficulties(data.unlockedDifficulties || ['easy', 'medium'])
-        setCurrentTier(data.currentTier || 'Bronze')
-      })
-      .catch(() => {
-        setUnlockedDifficulties(['easy', 'medium'])
-      })
-  }, [mode, user])
-
-  const game = useGame(mode, selectedDifficulty || undefined)
-
-  // Start round on mount for casual, or after difficulty selected for competitive
-  useEffect(() => {
-    if (mode === 'casual' && !game.round && game.phase !== 'result' && game.phase !== 'expired') {
-      game.startRound()
-    }
-    if (selectedDifficulty && showDifficultySelect) {
-      game.startRound()
-      setShowDifficultySelect(false)
-    }
-  }, [mode, selectedDifficulty]) // eslint-disable-line react-hooks/exhaustive-deps
+    memPhaseRef.current = phase === 'memorization'
+    reconPhaseRef.current = phase === 'reconstruction'
+  }, [phase])
 
   // Timer for memorization phase
   const memTimer = useTimer({
-    duration: game.round?.memorizationSeconds || 3,
-    autoStart: game.phase === 'memorize',
-    onExpire: game.onMemorizeComplete,
+    duration: config?.colorTimeSeconds || 6,
+    autoStart: false,
+    onExpire: () => {
+      if (memPhaseRef.current) {
+        soundService.playMemorizationEnd()
+        setPhase('reconstruction')
+      reconTimer.reset(config.roundTimeSeconds)
+      reconTimer.start()
+      }
+      
+    },
   })
 
   // Timer for reconstruction phase
   const reconTimer = useTimer({
-    duration: TOTAL_GAME_SECONDS - (game.round?.memorizationSeconds || 3),
-    autoStart: game.phase === 'reconstruct',
-    onExpire: game.onExpire,
+    duration: config?.roundTimeSeconds || 35,
+    autoStart: false,
+    onExpire: () => {
+      if (reconPhaseRef.current && currentColor && selectedDifficulty) {
+        const memorizationSeconds = config?.colorTimeSeconds || 6
+        submitGuess(selectedDifficulty, currentColor, userColor, memorizationSeconds)
+          .catch(console.error)
+      }
+    },
   })
 
-  useEffect(() => {
-    if (game.phase === 'memorize') memTimer.start()
-  }, [game.phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    if (game.phase === 'reconstruct') reconTimer.start()
-  }, [game.phase]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Start a new round
+const startRound = useCallback(async (difficulty: Difficulty) => {
+  try {
+    const data = await generateRound(difficulty)
 
-  const handleDifficultySelect = useCallback((diff: Difficulty) => {
-    setSelectedDifficulty(diff)
+    setPhase('memorization')
+
+    soundService.playRoundStart()
+
+    // 🔥 START TIMER HERE (guaranteed config exists)
+    memTimer.reset(data.config.colorTimeSeconds)
+    memTimer.start()
+
+  } catch (error) {
+    console.error('Failed to start round:', error)
+  }
+}, [generateRound, setPhase, memTimer])
+
+  // Handle difficulty selection
+  const handleDifficultySelect = useCallback(async (difficulty: Difficulty) => {
+    setSelectedDifficulty(difficulty)
+    setShowDifficultySelect(false)
+    
+    // Update URL without reload
     const params = new URLSearchParams(searchParams)
-    params.set('difficulty', diff)
+    params.set('difficulty', difficulty)
     navigate(`/play?${params.toString()}`, { replace: true })
-  }, [navigate, searchParams])
+    
+    await startRound(difficulty)
+  }, [navigate, searchParams, startRound])
 
+  // Handle play again
   const handlePlayAgain = useCallback(() => {
-    if (mode === 'competitive') {
-      // Clear game state and show difficulty select
-      setShowDifficultySelect(true)
-      setSelectedDifficulty(null)
-      // Reset game state by forcing a re-render key
-      // The useGame hook will reset when selectedDifficulty changes to null then back
-    } else {
-      game.playAgain()
+    if (mode === 'competitive' && !isVerified) {
+      navigate('/verify')
+      return
     }
-  }, [mode, game])
+    
+    resetGame()
+    setShowDifficultySelect(true)
+    setSelectedDifficulty(null)
+    // Clear URL difficulty param
+    navigate('/play', { replace: true })
+  }, [mode, isVerified, resetGame, navigate])
 
-  // Loading while fetching round (not during difficulty select)
-  if (game.phase === 'loading' && !showDifficultySelect) {
-    return (
-      <div className="flex items-center justify-center min-h-[calc(100dvh-3.5rem)]">
-        <div className="text-center space-y-4">
-          <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-muted text-sm">Generating color...</p>
-        </div>
-      </div>
-    )
-  }
+  // Handle retry with same difficulty
+  const handleRetry = useCallback(() => {
+    if (selectedDifficulty) {
+      resetGame()
+      startRound(selectedDifficulty)
+    } else {
+      handlePlayAgain()
+    }
+  }, [selectedDifficulty, resetGame, startRound, handlePlayAgain])
 
-  // Fatal error (no round, no difficulty select)
-  if (game.error && !game.round && !showDifficultySelect) {
-    return (
-      <div className="max-w-game mx-auto px-4 py-12 text-center space-y-4">
-        <AlertTriangle className="w-10 h-10 text-accent mx-auto" />
-        <p className="text-deep font-medium">{game.error}</p>
-        <div className="flex gap-3 justify-center">
-          <Button onClick={game.goHome} icon={<Home className="w-4 h-4" />}>
-            Home
-          </Button>
-        </div>
-      </div>
-    )
-  }
+  // Handle home navigation
+  const handleGoHome = useCallback(() => {
+    navigate('/')
+  }, [navigate])
 
-  const isReconstructPhase = game.phase === 'reconstruct' || game.phase === 'submitting'
-  const isMemorizePhase = game.phase === 'memorize'
-  const currentTimer = game.phase === 'memorize' ? memTimer : reconTimer
-  const timerLabel =
-    game.phase === 'memorize'
-      ? `Memorize · ${game.round?.memorizationSeconds || 3}s`
-      : 'Reconstruct · 30s window'
+  // Handle color change
+  const handleColorChange = useCallback((channel: 'h' | 's' | 'l', value: number) => {
+    setUserColor(prev => ({ ...prev, [channel]: value }))
+  }, [setUserColor])
+
+  // Handle submit
+  const handleSubmit = useCallback(async () => {
+    if (!selectedDifficulty || !currentColor || isSubmitting) return
+    
+    const memorizationSeconds = config?.colorTimeSeconds || 6
+    
+    try {
+      reconTimer.pause()
+      await submitGuess(selectedDifficulty, currentColor, userColor, memorizationSeconds)
+    } catch (error) {
+      console.error('Submit failed:', error)
+    }
+  }, [selectedDifficulty, currentColor, userColor, isSubmitting, config, submitGuess, reconTimer])
+
+  // Initial load for casual mode - start with Easy by default
+  useEffect(() => {
+    if (mode === 'casual' && !selectedDifficulty && !showDifficultySelect && !currentColor) {
+      handleDifficultySelect('easy')
+    }
+  }, [mode, selectedDifficulty, showDifficultySelect, currentColor, handleDifficultySelect])
+
+  // Determine timer props
+  const activeTimer = phase === 'memorization' ? memTimer : reconTimer
+  const timerLabel = phase === 'memorization' 
+    ? `Memorize · ${config?.colorTimeSeconds || 6}s`
+    : `Reconstruct · ${config?.roundTimeSeconds || 35}s`
 
   return (
     <div className="max-w-game mx-auto px-4 py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <button
-          onClick={game.goHome}
+          onClick={handleGoHome}
           className="flex items-center gap-1 text-muted hover:text-deep transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -150,12 +196,10 @@ export default function Game() {
         </button>
 
         <div className="flex items-center gap-2">
-          {mode === 'competitive' && (
-            <span className="text-xs font-medium text-accent bg-accent/5 px-3 py-1 rounded-full">
-              Competitive
-            </span>
-          )}
-          {selectedDifficulty && (
+          <span className="text-xs font-medium text-muted bg-surface-alt px-3 py-1 rounded-full capitalize">
+            {mode}
+          </span>
+          {selectedDifficulty && phase !== 'result' && (
             <span className="text-xs font-medium text-muted bg-surface-alt px-3 py-1 rounded-full capitalize">
               {selectedDifficulty}
             </span>
@@ -164,8 +208,8 @@ export default function Game() {
       </div>
 
       <AnimatePresence mode="wait">
-        {/* Difficulty select — show INSTEAD of game content, not alongside */}
-        {showDifficultySelect && mode === 'competitive' && (
+        {/* Difficulty Select */}
+        {showDifficultySelect && (
           <motion.div
             key="difficulty-select"
             initial={{ opacity: 0, y: 20 }}
@@ -175,14 +219,15 @@ export default function Game() {
           >
             <DifficultySelect
               onSelect={handleDifficultySelect}
-              unlockedDifficulties={unlockedDifficulties}
-              currentTier={currentTier}
+              unlockedDifficulties={['easy', 'medium', 'hard', 'extreme']}
+              currentTier="All unlocked"
+              mode={mode}
             />
           </motion.div>
         )}
 
-        {/* Game content — only show when NOT showing difficulty select */}
-        {!showDifficultySelect && (
+        {/* Game Content */}
+        {!showDifficultySelect && currentColor && (
           <motion.div
             key="game-content"
             initial={{ opacity: 0 }}
@@ -190,90 +235,72 @@ export default function Game() {
             exit={{ opacity: 0 }}
             className="space-y-6"
           >
-            {/* Timer bar (during gameplay) */}
-            {(isMemorizePhase || isReconstructPhase) && (
+            {/* Timer Bar */}
+            {(phase === 'memorization' || phase === 'reconstruction') && (
               <TimerBar
-                percentage={currentTimer.percentage}
-                isWarning={currentTimer.percentage < 25}
+                timeRemaining={activeTimer.timeRemaining}
+                totalTime={phase === 'memorization' ? config?.colorTimeSeconds || 6 : config?.roundTimeSeconds || 35}
                 label={timerLabel}
-                phase={game.phase === 'memorize' ? 'memorize' : 'reconstruct'}
+                isUrgent={activeTimer.isUrgent}
               />
             )}
 
-            {/* Memorize phase */}
-            {game.phase === 'memorize' && game.round && (
+            {/* Memorize Phase */}
+            {phase === 'memorization' && (
               <div className="space-y-6">
-                <ColorDisplay color={game.round.color} visible={true} />
+                <ColorDisplay color={currentColor} showControls={false} />
                 <p className="text-center text-sm text-muted">
                   Memorize this color before it disappears
                 </p>
               </div>
             )}
 
-            {/* Reconstruct / Submitting */}
-            {isReconstructPhase && (
+            {/* Reconstruction Phase */}
+            {phase === 'reconstruction' && (
               <div className="space-y-6">
                 <ColorSliders
-                  color={game.userColor}
-                  onChange={game.updateColor}
-                  disabled={game.phase === 'submitting'}
+                  color={userColor}
+                  onChange={handleColorChange}
+                  onSubmit={handleSubmit}
+                  disabled={isSubmitting}
                 />
 
-                <Button
-                  fullWidth
-                  onClick={game.submitGuess}
-                  loading={game.phase === 'submitting'}
-                  disabled={game.phase === 'submitting'}
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className="w-full bg-gradient-to-r from-primary to-accent text-white py-3 rounded-xl font-semibold hover:opacity-90 transition-all disabled:opacity-50"
                 >
-                  Submit Guess
-                </Button>
-
-                {game.error && game.phase === 'reconstruct' && (
-                  <p className="text-center text-sm text-accent">{game.error}</p>
-                )}
+                  {isSubmitting ? 'Submitting...' : 'Submit Guess'}
+                </button>
               </div>
             )}
 
-            {/* Expired */}
-            {game.phase === 'expired' && (
-              <div className="text-center space-y-6 py-8">
-                <Clock className="w-12 h-12 text-accent mx-auto" />
-                <div>
-                  <p className="font-heading text-xl font-semibold text-deep mb-1">Round Expired</p>
-                  <p className="text-sm text-muted">30-second submission window closed</p>
-                </div>
-                <div className="flex gap-3 justify-center">
-                  <Button onClick={handlePlayAgain} icon={<RefreshCw className="w-4 h-4" />}>
-                    Play Again
-                  </Button>
-                  <Button variant="secondary" onClick={game.goHome} icon={<Home className="w-4 h-4" />}>
-                    Home
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Result */}
-            {game.phase === 'result' && game.result && (
+            {/* Result Phase */}
+            {phase === 'result' && result && (
               <div className="space-y-6">
-                <ResultCard result={game.result} difficulty={selectedDifficulty || undefined} />
+                <ResultCard
+                  result={result}
+                  difficulty={selectedDifficulty || undefined}
+                  huePoints={huePointsUpdate}
+                  newlyUnlocked={newlyUnlocked}
+                  mode={mode}
+                />
 
                 <div className="flex gap-3">
-                  <Button
-                    onClick={handlePlayAgain}
-                    icon={<RefreshCw className="w-4 h-4" />}
-                    fullWidth
+                  <button
+                    onClick={handleRetry}
+                    className="flex-1 bg-gradient-to-r from-primary to-accent text-white py-3 rounded-xl font-semibold hover:opacity-90 transition-all"
                   >
+                    <RefreshCw className="w-4 h-4 inline mr-2" />
                     Play Again
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={game.goHome}
-                    icon={<Home className="w-4 h-4" />}
-                    fullWidth
+                  </button>
+                  <button
+                    onClick={handleGoHome}
+                    className="flex-1 bg-surface-alt text-deep py-3 rounded-xl font-semibold hover:bg-surface-alt/80 transition-all"
                   >
+                    <Home className="w-4 h-4 inline mr-2" />
                     Home
-                  </Button>
+                  </button>
                 </div>
               </div>
             )}

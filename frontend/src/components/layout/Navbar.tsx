@@ -44,10 +44,6 @@ export function Navbar() {
                   )}
                 </Button>
               </Link>
-              
-              <Button variant="ghost" icon={<LogOut className="w-4 h-4" />} onClick={handleLogout}>
-                <span className="hidden sm:inline">Log out</span>
-              </Button>
             </>
           ) : (
             <>

@@ -1,11 +1,20 @@
 import { motion } from 'framer-motion'
 import { useEffect, useState, useRef } from 'react'
-import { Check, X } from 'lucide-react'
-import type { SubmitResponse, Difficulty } from '../../types'
+import { Check, X, Trophy, TrendingUp, Zap } from 'lucide-react'
+import type { RoundResult, Difficulty, Achievement } from '../../types'
 
 interface ResultCardProps {
-  result: SubmitResponse
+  result: RoundResult
   difficulty?: Difficulty
+  huePoints?: {
+    oldRating: number
+    newRating: number
+    change: number
+    streak: number
+    rankTier: string
+  }
+  newlyUnlocked?: Achievement[],
+  mode?: 'casual' | 'competitive' 
 }
 
 function hslString(c: { h: number; s: number; l: number }): string {
@@ -23,7 +32,6 @@ function CountUpNumber({ value, duration = 0.8 }: { value: number; duration?: nu
     const animate = () => {
       const elapsed = (Date.now() - startTime.current) / 1000
       const progress = Math.min(elapsed / duration, 1)
-      // Ease out cubic
       const eased = 1 - Math.pow(1 - progress, 3)
       setDisplayed(value * eased)
 
@@ -36,7 +44,7 @@ function CountUpNumber({ value, duration = 0.8 }: { value: number; duration?: nu
     return () => cancelAnimationFrame(frameRef.current)
   }, [value, duration])
 
-  return <span>{displayed.toFixed(3)}%</span>
+  return <span>{displayed.toFixed(1)}%</span>
 }
 
 function getAccuracyMessage(accuracy: number): string {
@@ -49,8 +57,9 @@ function getAccuracyMessage(accuracy: number): string {
   return 'Keep practicing.'
 }
 
-export function ResultCard({ result, difficulty }: ResultCardProps) {
+export function ResultCard({ result, difficulty, mode, huePoints, newlyUnlocked }: ResultCardProps) {
   const message = getAccuracyMessage(result.accuracy)
+  const isNegative = result.isNegative
 
   return (
     <motion.div
@@ -71,16 +80,28 @@ export function ResultCard({ result, difficulty }: ResultCardProps) {
         </motion.p>
         <p className="text-sm text-muted mt-1">{message}</p>
 
-        {difficulty && (
-          <p className="text-xs text-muted mt-2 capitalize">
-            {difficulty} mode · Score: {result.score.toFixed(1)}
-          </p>
-        )}
+      {difficulty && mode === 'competitive' && (
+        <div className="flex items-center justify-center gap-2 mt-2">
+          <span className="text-xs font-medium text-muted bg-surface-alt px-3 py-1 rounded-full capitalize">
+            {difficulty}
+          </span>
+          <span className="text-xs font-medium text-muted bg-surface-alt px-3 py-1 rounded-full">
+            {result.multiplier}x multiplier
+          </span>
+        </div>
+      )}
+
+      {difficulty && mode === 'casual' && (
+        <div className="flex items-center justify-center gap-2 mt-2">
+          <span className="text-xs font-medium text-muted bg-surface-alt px-3 py-1 rounded-full capitalize">
+            {difficulty}
+          </span>
+        </div>
+      )}
       </div>
 
       {/* Color comparison */}
       <div className="grid grid-cols-2 gap-3">
-        {/* Original */}
         <div className="text-center space-y-2">
           <p className="text-xs font-medium text-muted uppercase tracking-wider">Original</p>
           <div
@@ -92,9 +113,8 @@ export function ResultCard({ result, difficulty }: ResultCardProps) {
           </p>
         </div>
 
-        {/* User */}
         <div className="text-center space-y-2">
-          <p className="text-xs font-medium text-muted uppercase tracking-wider">Yours</p>
+          <p className="text-xs font-medium text-muted uppercase tracking-wider">Your Guess</p>
           <div
             className="w-full aspect-square rounded-xl border border-border shadow-sm"
             style={{ backgroundColor: hslString(result.userColor) }}
@@ -105,28 +125,68 @@ export function ResultCard({ result, difficulty }: ResultCardProps) {
         </div>
       </div>
 
-      {/* Rating change for competitive */}
-      {result.ratingChange && (
+      {/* HuePoints change (competitive mode only) */}
+      {huePoints && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-surface-alt"
+          className="space-y-3"
         >
-          {result.ratingChange.ratingChange >= 0 ? (
-            <Check className="w-4 h-4 text-success" />
-          ) : (
-            <X className="w-4 h-4 text-accent" />
-          )}
-          <span className="text-sm font-medium">
-            {result.ratingChange.ratingChange >= 0 ? '+' : ''}
-            {result.ratingChange.ratingChange} Huepoints
-          </span>
-          {result.ratingChange.tierChanged && (
-            <span className="text-xs text-primary font-medium">
-              → {result.ratingChange.newTier}
+          <div className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl ${
+            huePoints.change >= 0 ? 'bg-success/10' : 'bg-accent/10'
+          }`}>
+            {huePoints.change >= 0 ? (
+              <TrendingUp className="w-4 h-4 text-success" />
+            ) : (
+              <TrendingUp className="w-4 h-4 text-accent rotate-180" />
+            )}
+            <span className="text-sm font-medium">
+              {huePoints.change >= 0 ? '+' : ''}{huePoints.change} HuePoints
             </span>
+            <span className="text-xs text-muted">
+              {huePoints.oldRating} → {huePoints.newRating}
+            </span>
+          </div>
+
+          {/* Streak display */}
+          {huePoints.streak > 0 && (
+            <div className="flex items-center justify-center gap-2 text-sm">
+              <Zap className="w-4 h-4 text-yellow-500" />
+              <span className="font-medium">{huePoints.streak}</span>
+              <span className="text-muted">game streak</span>
+            </div>
           )}
+
+          {/* Rank tier */}
+          <div className="flex items-center justify-center gap-2">
+            <Trophy className="w-4 h-4 text-primary" />
+            <span className="text-sm font-medium">{huePoints.rankTier}</span>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Newly unlocked achievements */}
+      {newlyUnlocked && newlyUnlocked.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="space-y-2 pt-2"
+        >
+          <p className="text-center text-xs font-medium text-primary uppercase tracking-wider">
+            Achievements Unlocked!
+          </p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {newlyUnlocked.map((ach) => (
+              <div
+                key={ach.key}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm"
+              >
+                <span>{ach.icon}</span>
+                <span>{ach.name}</span>
+              </div>
+            ))}
+          </div>
         </motion.div>
       )}
     </motion.div>
