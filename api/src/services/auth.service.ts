@@ -72,11 +72,7 @@ export class AuthService {
     }
 
     const user = result.rows[0];
-    
-    // Check if user is verified
-    if (!user.is_verified) {
-      throw new Error('Please verify your email before logging in. Check your inbox for the verification link.');
-    }
+  
     
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
 

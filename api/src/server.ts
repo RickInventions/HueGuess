@@ -22,10 +22,19 @@ const PORT = process.env.PORT || 3000;
 // Initialize Socket.IO
 const io = initializeSocketIO(server);
 
-app.use(cors({
+// Configure CORS properly
+const corsOptions = {
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Key'],
+};
+
+app.use(cors(corsOptions));
+
+// Handle preflight requests
+app.options('*', cors(corsOptions));
+
 app.use(express.json());
 
 // Routes

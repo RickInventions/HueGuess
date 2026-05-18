@@ -57,17 +57,21 @@ router.get('/verify', async (req, res) => {
     const { token, email } = req.query;
     
     if (!token || !email) {
-      res.redirect(`${process.env.FRONTEND_URL}/verify-error?error=Missing verification data`);
+      res.status(400).json({ error: 'Missing token or email' });
       return;
     }
     
-    await AuthService.verifyEmail(token as string, email as string);
+    const result = await AuthService.verifyEmail(token as string, email as string);
     
-    // Redirect to frontend success page
-    res.redirect(`${process.env.FRONTEND_URL}/verify-success`);
+    // Return JSON instead of redirect for CORS
+    res.json({ 
+      success: true, 
+      message: 'Email verified successfully' 
+    });
   } catch (error) {
-    const errorMessage = encodeURIComponent((error as Error).message);
-    res.redirect(`${process.env.FRONTEND_URL}/verify-error?error=${errorMessage}`);
+    console.error('Verification error:', error);
+    const message = (error as Error).message;
+    res.status(400).json({ error: message });
   }
 });
 
