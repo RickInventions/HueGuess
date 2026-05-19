@@ -2,17 +2,16 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link, useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  Mail,
   Calendar,
-  CheckCircle,
-  XCircle,
   Crown,
   Target,
   Zap,
-  TrendingUp,
   Swords,
   Edit2,
   Lock,
+  Eye,
+  ArrowLeft,
+  Medal,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { user as userApi } from '../lib/api'
@@ -106,7 +105,6 @@ export default function Profile() {
       toast.success('Username changed successfully!')
       setShowUsernameModal(false)
       setNewUsername('')
-      // Refresh auth context
       await checkAuth()
       loadProfile()
     } catch (error: any) {
@@ -168,6 +166,7 @@ export default function Profile() {
   }
 
   const stats = profile.stats
+  const achievements = profile.achievements
   const tierColor = stats?.rankTier ? RANK_COLORS[stats.rankTier.toLowerCase() as keyof typeof RANK_COLORS] : '#667eea'
   const rankProgress = stats?.rating ? getRankProgress(stats.rating) : null
   const rankIcon = stats?.rankTier ? RANK_ICONS[stats.rankTier.toLowerCase() as keyof typeof RANK_ICONS] : '🎨'
@@ -250,6 +249,24 @@ export default function Profile() {
         </div>
       )}
 
+      {/* Viewing Indicator (for other user's profiles) */}
+      {!isOwnProfile && (
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-2 text-muted hover:text-deep transition-colors text-sm"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-medium">
+            <Eye className="w-3 h-3" />
+            Viewing {profile.user.username}'s profile
+          </div>
+          <div className="w-16" /> {/* Spacer for alignment */}
+        </div>
+      )}
+
       {/* Profile Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -274,37 +291,6 @@ export default function Profile() {
           )}
         </div>
 
-        {isOwnProfile && (
-          <p className="text-muted text-sm flex items-center justify-center gap-1">
-            <Mail className="w-3 h-3" />
-            {profile.email}
-          </p>
-        )}
-
-        {/* Verification status */}
-        <div className="flex items-center justify-center gap-2">
-          {profile.user.isVerified ? (
-            <>
-              <CheckCircle className="w-4 h-4 text-success" />
-              <span className="text-sm text-success font-medium">Verified</span>
-            </>
-          ) : (
-            <>
-              <XCircle className="w-4 h-4 text-accent" />
-              <span className="text-sm text-accent font-medium">Not verified</span>
-              {isOwnProfile && (
-                <button
-                  onClick={handleResendVerification}
-                  disabled={resendingVerification}
-                  className="text-xs text-primary hover:underline ml-1"
-                >
-                  {resendingVerification ? 'Sending...' : 'Resend'}
-                </button>
-              )}
-            </>
-          )}
-        </div>
-
         <div className="flex items-center justify-center gap-1 text-xs text-muted">
           <Calendar className="w-3 h-3" />
           Joined {format(new Date(profile.user.joinedDate), 'MMM d, yyyy')}
@@ -312,7 +298,7 @@ export default function Profile() {
 
         {/* Settings buttons for own profile */}
         {isOwnProfile && (
-          <div className="flex items-center justify-center gap-2">
+          <div className="flex items-center justify-center gap-2 pt-2">
             <button
               onClick={() => setShowPasswordModal(true)}
               className="text-xs text-muted hover:text-deep transition-colors flex items-center gap-1"
@@ -360,7 +346,7 @@ export default function Profile() {
             </Card>
           </motion.div>
 
-          {/* Stats Grid */}
+          {/* Stats Grid - Only showing requested fields */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -373,28 +359,67 @@ export default function Profile() {
               <p className="text-xs text-muted">Avg Accuracy</p>
             </Card>
             <Card className="text-center">
-              <TrendingUp className="w-5 h-5 text-success mx-auto mb-2" />
+              <Zap className="w-5 h-5 text-yellow-500 mx-auto mb-2" />
               <p className="text-xl font-heading font-semibold">{stats.bestStreak || 0}</p>
               <p className="text-xs text-muted">Best Streak</p>
-            </Card>
-            <Card className="text-center">
-              <Zap className="w-5 h-5 text-yellow-500 mx-auto mb-2" />
-              <p className="text-xl font-heading font-semibold">{stats.currentStreak}</p>
-              <p className="text-xs text-muted">Current Streak</p>
             </Card>
             <Card className="text-center">
               <Swords className="w-5 h-5 text-accent mx-auto mb-2" />
               <p className="text-xl font-heading font-semibold">{stats.gamesPlayed}</p>
               <p className="text-xs text-muted">Games Played</p>
             </Card>
+            <Card className="text-center">
+              <div className="text-2xl mb-1">🏆</div>
+              <p className="text-xl font-heading font-semibold">{stats.rankTier}</p>
+              <p className="text-xs text-muted">Rank</p>
+            </Card>
           </motion.div>
 
-          {/* Games by difficulty */}
-          {profile.gamesByDifficulty && profile.gamesByDifficulty.length > 0 && (
+          {/* Achievements Section */}
+          {achievements && achievements.unlocked && achievements.unlocked.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-heading font-semibold text-sm text-muted uppercase tracking-wider flex items-center gap-2">
+                  <Medal className="w-4 h-4" />
+                  Achievements ({achievements.totalUnlocked})
+                </h3>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {achievements.unlocked.slice(0, 6).map((ach: any) => (
+                  <div
+                    key={ach.key}
+                    className="flex flex-col items-center text-center p-2 rounded-xl bg-surface-alt group hover:bg-surface-alt/70 transition-colors cursor-help"
+                    title={`${ach.name}: ${ach.description}`}
+                  >
+                    <div className="text-2xl mb-1">{ach.icon}</div>
+                    <p className="text-[10px] font-medium truncate max-w-full">{ach.name}</p>
+                  </div>
+                ))}
+                {achievements.unlocked.length > 6 && (
+                  <div className="flex flex-col items-center justify-center text-center p-2 rounded-xl bg-surface-alt">
+                    <div className="text-sm font-semibold text-muted">+{achievements.unlocked.length - 6}</div>
+                    <p className="text-[10px] text-muted">more</p>
+                  </div>
+                )}
+              </div>
+              {isOwnProfile && achievements.totalUnlocked < achievements.totalPossible && (
+                <p className="text-xs text-muted text-center mt-2">
+                  Keep playing to unlock more achievements!
+                </p>
+              )}
+            </motion.div>
+          )}
+
+          {/* Games by difficulty - Only show if available */}
+          {profile.gamesByDifficulty && profile.gamesByDifficulty.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
             >
               <Card>
                 <h3 className="font-heading font-semibold text-sm text-muted uppercase tracking-wider mb-3">
@@ -409,29 +434,6 @@ export default function Profile() {
                   ))}
                 </div>
               </Card>
-            </motion.div>
-          )}
-
-          {/* Rating History */}
-          {profile.ratingHistory && profile.ratingHistory.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25 }}
-            >
-              <h3 className="font-heading font-semibold text-sm text-muted uppercase tracking-wider mb-3">
-                Rating History
-              </h3>
-              <div className="space-y-1.5 max-h-64 overflow-y-auto">
-                {profile.ratingHistory.slice(-20).map((entry: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between px-3 py-2 rounded-xl bg-surface-alt text-sm">
-                    <span className="text-xs text-muted">
-                      {format(new Date(entry.date), 'MMM d')}
-                    </span>
-                    <span className="font-mono font-semibold">{entry.rating}</span>
-                  </div>
-                ))}
-              </div>
             </motion.div>
           )}
         </>

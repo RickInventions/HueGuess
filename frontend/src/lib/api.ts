@@ -109,13 +109,15 @@ export const leaderboard = {
   }) => api.get('/leaderboard', { params }),
   getAwards: () => api.get('/leaderboard/awards'),
   getGlobalStats: () => api.get('/leaderboard/global-stats'),
+  getTopPlayers: (limit: number = 3) => 
+    api.get('/leaderboard', { params: { limit, sortBy: 'points', sortOrder: 'DESC' } }),
 };
 
 // Achievement endpoints
 export const achievements = {
   getAll: () => api.get('/achievements'),
   getMine: () => api.get('/achievements/me'),
-  getRecent: () => api.get('/achievements/recent'),
+  getRecent: () => api.get('/achievements/recent/unseen'),
 };
 
 // Daily challenge endpoints

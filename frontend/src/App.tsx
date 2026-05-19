@@ -10,9 +10,10 @@ import Register from './pages/Register';
 import VerifyEmail from './pages/VerifyEmail';
 import Profile from './pages/Profile';
 import Daily from './pages/Daily'
+import Leaderboard from './pages/Leaderboard';
+import Achievements from './pages/Achievements';
 
 // Placeholder pages (to be implemented later)
-const Leaderboard = () => <div className="p-8 text-center">Leaderboard Page (Coming Soon)</div>;
 const Stats = () => <div className="p-8 text-center">Stats Page (Coming Soon)</div>;
 const Challenge = () => <div className="p-8 text-center">Challenge Mode (Coming Soon)</div>;
 const Room = () => <div className="p-8 text-center">Room Page (Coming Soon)</div>;
@@ -60,6 +61,7 @@ function App() {
           <Route path="/verify-success" element={<VerifyEmail />} />
           <Route path="/verify-error" element={<VerifyEmail />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/achievements" element={<Achievements />} />
           
           {/* Protected routes - require authentication */}
           <Route 
@@ -75,9 +77,9 @@ function App() {
             element={isAuthenticated ? <Stats /> : <Navigate to="/login" />} 
           />
           <Route 
-  path="/daily" 
-  element={isAuthenticated && isVerified ? <Daily /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />} 
-/>
+            path="/daily" 
+            element={isAuthenticated && isVerified ? <Daily /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />} 
+          />
           <Route 
             path="/challenge" 
             element={isAuthenticated && isVerified ? <Challenge /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />} 
