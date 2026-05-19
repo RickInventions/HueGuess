@@ -150,7 +150,7 @@ export function ResultCard({ result, difficulty, mode, huePoints, newlyUnlocked 
           </div>
 
           {/* Streak display */}
-          {huePoints.streak > 0 && (
+          {huePoints && huePoints.streak > 0 && (difficulty === 'hard' || difficulty === 'extreme') && (
             <div className="flex items-center justify-center gap-2 text-sm">
               <Zap className="w-4 h-4 text-yellow-500" />
               <span className="font-medium">{huePoints.streak}</span>
