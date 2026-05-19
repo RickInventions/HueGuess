@@ -470,15 +470,19 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Footer */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.8 }}
-          className="text-center text-xs text-muted mt-12"
-        >
-          No sign-up required for casual mode. • <Link to="/leaderboard" className="hover:underline">Leaderboard</Link> • <Link to="/achievements" className="hover:underline">Achievements</Link>
-        </motion.p>
+{/* Footer */}
+<motion.p
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+  transition={{ delay: 0.8 }}
+  className="text-center text-xs text-muted mt-12"
+>
+  No sign-up required for casual mode. •{' '}
+  <Link to="/leaderboard" className="hover:underline">Leaderboard</Link> •{' '}
+  <Link to="/achievements" className="hover:underline">Achievements</Link> •{' '}
+  <Link to="/faq" className="hover:underline">FAQ</Link> •{' '}
+  <Link to="/support" className="hover:underline">Support</Link>
+</motion.p>
       </div>
     </div>
   )

@@ -12,6 +12,8 @@ import Profile from './pages/Profile';
 import Daily from './pages/Daily'
 import Leaderboard from './pages/Leaderboard';
 import Achievements from './pages/Achievements';
+import FAQ from './pages/FAQ'
+import Support from './pages/Support'
 
 // Placeholder pages (to be implemented later)
 const Stats = () => <div className="p-8 text-center">Stats Page (Coming Soon)</div>;
@@ -62,6 +64,8 @@ function App() {
           <Route path="/verify-error" element={<VerifyEmail />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/achievements" element={<Achievements />} />
+          <Route path="/faq" element={<FAQ />} />
+          <Route path="/support" element={<Support />} />
           
           {/* Protected routes - require authentication */}
           <Route 
