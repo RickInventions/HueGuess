@@ -59,6 +59,14 @@ export const getRankTier = (rating: number): string => {
   return 'Diamond';
 };
 
+export const RANK_COLORS = {
+  bronze: '#CD7F32',
+  silver: '#C0C0C0',
+  gold: '#FFD700',
+  platinum: '#E5E4E2',
+  diamond: '#B9F2FF',
+}
+
 export const getRankProgress = (rating: number) => {
   let currentThreshold = 0;
   let nextThreshold = 300;

@@ -13,14 +13,13 @@ import {
   Swords,
   Edit2,
   Lock,
-  AlertCircle,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { user as userApi, stats as statsApi } from '../lib/api'
+import { user as userApi } from '../lib/api'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { ProgressBar } from '../components/ui/ProgressBar'
-import { getRankProgress, RANK_ICONS } from '../lib/constants'
+import { getRankProgress, RANK_ICONS, RANK_COLORS } from '../lib/constants'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 
@@ -169,7 +168,7 @@ export default function Profile() {
   }
 
   const stats = profile.stats
-  const tierColor = '#667eea' // You can implement tier colors based on rank
+  const tierColor = stats?.rankTier ? RANK_COLORS[stats.rankTier.toLowerCase() as keyof typeof RANK_COLORS] : '#667eea'
   const rankProgress = stats?.rating ? getRankProgress(stats.rating) : null
   const rankIcon = stats?.rankTier ? RANK_ICONS[stats.rankTier.toLowerCase() as keyof typeof RANK_ICONS] : '🎨'
 
@@ -375,8 +374,8 @@ export default function Profile() {
             </Card>
             <Card className="text-center">
               <TrendingUp className="w-5 h-5 text-success mx-auto mb-2" />
-              <p className="text-xl font-heading font-semibold">{stats.bestScore || 0}</p>
-              <p className="text-xs text-muted">Best Score</p>
+              <p className="text-xl font-heading font-semibold">{stats.bestStreak || 0}</p>
+              <p className="text-xs text-muted">Best Streak</p>
             </Card>
             <Card className="text-center">
               <Zap className="w-5 h-5 text-yellow-500 mx-auto mb-2" />
