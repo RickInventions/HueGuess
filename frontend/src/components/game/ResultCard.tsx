@@ -44,7 +44,7 @@ function CountUpNumber({ value, duration = 0.8 }: { value: number; duration?: nu
     return () => cancelAnimationFrame(frameRef.current)
   }, [value, duration])
 
-  return <span>{displayed.toFixed(1)}%</span>
+  return <span>{displayed.toFixed(3)}%</span>
 }
 
 function getAccuracyMessage(accuracy: number): string {

@@ -9,6 +9,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import VerifyEmail from './pages/VerifyEmail';
 import Profile from './pages/Profile';
+import Daily from './pages/Daily'
 
 // Placeholder pages (to be implemented later)
 const Leaderboard = () => <div className="p-8 text-center">Leaderboard Page (Coming Soon)</div>;
@@ -73,6 +74,10 @@ function App() {
             path="/stats" 
             element={isAuthenticated ? <Stats /> : <Navigate to="/login" />} 
           />
+          <Route 
+  path="/daily" 
+  element={isAuthenticated && isVerified ? <Daily /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />} 
+/>
           <Route 
             path="/challenge" 
             element={isAuthenticated && isVerified ? <Challenge /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />} 
