@@ -491,18 +491,43 @@ export default function Home() {
         </div>
 
 {/* Footer */}
-<motion.p
+{/* Footer */}
+<motion.div
   initial={{ opacity: 0 }}
   animate={{ opacity: 1 }}
   transition={{ delay: 0.8 }}
-  className="text-center text-xs text-muted mt-12"
+  className="text-center mt-12 pt-4 border-t border-border/30"
 >
-  No sign-up required for casual mode. •{' '}
-  <Link to="/leaderboard" className="hover:underline">Leaderboard</Link> •{' '}
-  <Link to="/achievements" className="hover:underline">Achievements</Link> •{' '}
-  <Link to="/faq" className="hover:underline">FAQ</Link> •{' '}
-  <Link to="/support" className="hover:underline">Support</Link>
-</motion.p>
+  <div className="flex flex-wrap justify-center gap-x-3 gap-y-2 text-xs text-muted">
+    <span className="whitespace-nowrap">No sign-up required for casual mode.</span>
+    <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+      <Link 
+        to="/leaderboard" 
+        className="hover:text-primary transition-colors px-2 py-1 rounded-md hover:bg-primary/5"
+      >
+        Leaderboard
+      </Link>
+      <Link 
+        to="/achievements" 
+        className="hover:text-primary transition-colors px-2 py-1 rounded-md hover:bg-primary/5"
+      >
+        Achievements
+      </Link>
+      <Link 
+        to="/faq" 
+        className="font-semibold text-primary hover:text-primary/80 transition-colors px-2 py-1 rounded-md hover:bg-primary/5"
+      >
+        FAQ
+      </Link>
+      <Link 
+        to="/support" 
+        className="hover:text-primary transition-colors px-2 py-1 rounded-md hover:bg-primary/5"
+      >
+        Support
+      </Link>
+    </div>
+  </div>
+</motion.div>
       </div>
     </div>
   )

@@ -203,28 +203,28 @@ export default function FAQ() {
   ]
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 py-12">
-      <div className="max-w-4xl mx-auto px-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 py-8 sm:py-12">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center mb-12"
+          className="text-center mb-8 sm:mb-12"
         >
-          <div className="inline-flex items-center justify-center p-3 bg-primary/10 rounded-2xl mb-4">
-            <HelpCircle className="w-8 h-8 text-primary" />
+          <div className="inline-flex items-center justify-center p-2 sm:p-3 bg-primary/10 rounded-xl sm:rounded-2xl mb-3 sm:mb-4">
+            <HelpCircle className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
           </div>
-          <h1 className="font-heading text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent mb-4">
+          <h1 className="font-heading text-3xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent mb-3 sm:mb-4">
             Frequently Asked Questions
           </h1>
-          <p className="text-muted text-lg max-w-2xl mx-auto">
+          <p className="text-muted text-base sm:text-lg max-w-2xl mx-auto px-2">
             Everything you need to know about HueGuess. Can't find what you're looking for? 
             <Link to="/support" className="text-primary hover:underline ml-1">Contact support</Link>
           </p>
         </motion.div>
 
         {/* FAQ Categories */}
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {faqCategories.map((category, idx) => (
             <motion.div
               key={category.name}
@@ -235,14 +235,16 @@ export default function FAQ() {
               <Card className="overflow-hidden">
                 <button
                   onClick={() => toggleCategory(category.name.toLowerCase())}
-                  className="w-full px-6 py-4 flex items-center justify-between hover:bg-surface-alt transition-colors"
+                  className="w-full px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between hover:bg-surface-alt transition-colors"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="text-primary">{category.icon}</div>
-                    <h2 className="font-heading text-xl font-semibold">{category.name}</h2>
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="text-primary shrink-0">{category.icon}</div>
+                    <h2 className="font-heading text-lg sm:text-xl font-semibold text-left">
+                      {category.name}
+                    </h2>
                   </div>
                   <ChevronDown
-                    className={`w-5 h-5 text-muted transition-transform duration-200 ${
+                    className={`w-4 h-4 sm:w-5 sm:h-5 text-muted transition-transform duration-200 shrink-0 ${
                       openCategory === category.name.toLowerCase() ? 'rotate-180' : ''
                     }`}
                   />
@@ -257,23 +259,25 @@ export default function FAQ() {
                       transition={{ duration: 0.2 }}
                       className="border-t border-border"
                     >
-                      <div className="p-4 space-y-3">
+                      <div className="p-2 sm:p-4 space-y-2 sm:space-y-3">
                         {category.items.map((item, itemIdx) => {
                           const itemKey = `${category.name}-${itemIdx}`
                           return (
                             <div key={itemIdx} className="border-b border-border/50 last:border-0">
                               <button
                                 onClick={() => toggleItem(itemKey)}
-                                className="w-full px-4 py-3 flex items-center justify-between hover:bg-surface-alt rounded-lg transition-colors"
+                                className="w-full px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between hover:bg-surface-alt rounded-lg transition-colors gap-2"
                               >
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                                   {item.icon && (
-                                    <div className="text-muted">{item.icon}</div>
+                                    <div className="text-muted shrink-0">{item.icon}</div>
                                   )}
-                                  <span className="font-medium text-left">{item.question}</span>
+                                  <span className="font-medium text-left text-sm sm:text-base break-words">
+                                    {item.question}
+                                  </span>
                                 </div>
                                 <ChevronDown
-                                  className={`w-4 h-4 text-muted transition-transform duration-200 ${
+                                  className={`w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted transition-transform duration-200 shrink-0 ${
                                     openItems[itemKey] ? 'rotate-180' : ''
                                   }`}
                                 />
@@ -286,7 +290,7 @@ export default function FAQ() {
                                     exit={{ height: 0, opacity: 0 }}
                                     transition={{ duration: 0.2 }}
                                   >
-                                    <div className="px-4 pb-4 text-muted leading-relaxed">
+                                    <div className="px-3 sm:px-4 pb-3 sm:pb-4 text-muted leading-relaxed text-sm sm:text-base">
                                       {item.answer}
                                     </div>
                                   </motion.div>
@@ -309,15 +313,17 @@ export default function FAQ() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="mt-12 text-center"
+          className="mt-8 sm:mt-12 text-center"
         >
-          <Card className="p-8 bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5">
-            <h3 className="font-heading text-xl font-semibold mb-2">Still have questions?</h3>
-            <p className="text-muted mb-4">
+          <Card className="p-6 sm:p-8 bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5">
+            <h3 className="font-heading text-lg sm:text-xl font-semibold mb-2">
+              Still have questions?
+            </h3>
+            <p className="text-muted text-sm sm:text-base mb-4">
               Can't find the answer you're looking for? Please reach out to our support team.
             </p>
             <Link to="/support">
-              <button className="px-6 py-2 bg-primary text-white rounded-full hover:bg-primary/90 transition-colors">
+              <button className="px-5 sm:px-6 py-2 bg-primary text-white rounded-full hover:bg-primary/90 transition-colors text-sm sm:text-base">
                 Contact Support
               </button>
             </Link>
