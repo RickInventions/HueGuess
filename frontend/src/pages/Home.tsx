@@ -263,7 +263,7 @@ export default function Home() {
               </Link>
 
               {/* Challenge Mode */}
-              <Link
+              {/* <Link
                 to={user ? (isVerified ? '/challenge' : '#') : '/login?redirect=/challenge'}
                 onClick={handleChallengeClick}
                 className="block group"
@@ -281,7 +281,27 @@ export default function Home() {
                     </div>
                   </div>
                 </Card>
-              </Link>
+              </Link> */}
+<div className="block cursor-not-allowed">
+  <Card className="h-full border-l-4 border-l-purple-400 transition-all duration-300">
+    <div className="flex items-start gap-3">
+      <div className="p-2 rounded-xl bg-purple-400/10">
+        <Users className="w-6 h-6 text-purple-500" />
+      </div>
+      <div>
+        <div className="flex items-center gap-2">
+          <h3 className="font-heading font-semibold text-lg">Challenge</h3>
+          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
+            In Development
+          </span>
+        </div>
+        <p className="text-muted text-sm">
+          Real-time multiplayer — coming very soon!
+        </p>
+      </div>
+    </div>
+  </Card>
+</div>
             </motion.div>
 
             {/* User Search Section */}
