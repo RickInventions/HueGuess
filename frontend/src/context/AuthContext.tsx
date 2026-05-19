@@ -39,7 +39,7 @@ const validateStoredAuth = async () => {
       localStorage.setItem('user', JSON.stringify(validatedUser));
     } catch (error) {
       // Only clear if it's an auth error (401), not network errors
-      if (error.response?.status === 401) {
+      if ((error as any).response?.status === 401) {
         console.log('Token invalid, clearing storage');
         localStorage.removeItem('token');
         localStorage.removeItem('user');

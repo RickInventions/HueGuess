@@ -25,7 +25,7 @@ export function RoundResults({ results, timedOut }: RoundResultsProps) {
 
       {sorted.map((result, i) => (
         <motion.div
-          key={result.username}
+          // key={result.username}
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: i * 0.08 }}
@@ -50,7 +50,7 @@ export function RoundResults({ results, timedOut }: RoundResultsProps) {
               className="w-6 h-6 rounded-md border border-border shrink-0"
               style={{ backgroundColor: hslString(result.userColor) }}
             />
-            <span className="font-medium text-sm truncate ml-2">{result.username}</span>
+            {/* <span className="font-medium text-sm truncate ml-2">{result.username}</span> */}
           </div>
 
           {/* Accuracy */}

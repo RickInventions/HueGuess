@@ -33,7 +33,7 @@ export function RoomLeaderboard({ entries, rounds }: RoomLeaderboardProps) {
           <span className="font-medium text-sm flex-1">{entry.username}</span>
           <div className="text-right">
             <span className="font-heading font-semibold text-sm">{entry.avgAccuracy}%</span>
-            <p className="text-xs text-muted">{entry.roundsPlayed} rounds</p>
+            {/* <p className="text-xs text-muted">{entry.roundsPlayed} rounds</p> */}
           </div>
         </motion.div>
       ))}

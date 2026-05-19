@@ -16,7 +16,6 @@ import FAQ from './pages/FAQ'
 import Support from './pages/Support'
 
 // Placeholder pages (to be implemented later)
-const Stats = () => <div className="p-8 text-center">Stats Page (Coming Soon)</div>;
 const Challenge = () => <div className="p-8 text-center">Challenge Mode (Coming Soon)</div>;
 const Room = () => <div className="p-8 text-center">Room Page (Coming Soon)</div>;
 
@@ -75,10 +74,6 @@ function App() {
           <Route 
             path="/profile/:username" 
             element={<Profile />} 
-          />
-          <Route 
-            path="/stats" 
-            element={isAuthenticated ? <Stats /> : <Navigate to="/login" />} 
           />
           <Route 
             path="/daily" 
