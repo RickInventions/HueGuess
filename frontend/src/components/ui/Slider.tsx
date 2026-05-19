@@ -10,6 +10,7 @@ interface SliderProps {
   icon?: ReactNode
   className?: string
   trackStyle?: React.CSSProperties
+  disabled?: boolean 
 }
 
 export function Slider({
@@ -22,6 +23,7 @@ export function Slider({
   icon,
   className = '',
   trackStyle,
+  disabled = false,  // ✅ Default to false
 }: SliderProps) {
   const trackRef = useRef<HTMLDivElement>(null)
 
@@ -29,6 +31,8 @@ export function Slider({
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
+      if (disabled) return  // ✅ Prevent interaction when disabled
+      
       const track = trackRef.current
       if (!track) return
 
@@ -54,7 +58,7 @@ export function Slider({
       document.addEventListener('pointermove', handleMove)
       document.addEventListener('pointerup', handleUp)
     },
-    [min, max, step, onChange]
+    [min, max, step, onChange, disabled]  // ✅ Add disabled to deps
   )
 
   return (
@@ -68,7 +72,9 @@ export function Slider({
       <div
         ref={trackRef}
         onPointerDown={handlePointerDown}
-        className="relative h-8 rounded-slider cursor-pointer touch-none select-none"
+        className={`relative h-8 rounded-slider cursor-pointer touch-none select-none transition-opacity ${
+          disabled ? 'opacity-50 cursor-not-allowed' : ''
+        }`}
         style={{
           background: trackStyle?.background || '#F1EEE7',
           ...trackStyle,
@@ -84,7 +90,9 @@ export function Slider({
         />
         {/* Handle */}
         <div
-          className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-2 border-white shadow-slider-handle pointer-events-none transition-shadow"
+          className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-white border-2 border-white shadow-slider-handle pointer-events-none transition-shadow ${
+            disabled ? 'opacity-50' : ''
+          }`}
           style={{
             left: `${percentage}%`,
           }}

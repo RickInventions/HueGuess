@@ -18,13 +18,15 @@ export function ColorSliders({ color, onChange, onSubmit, disabled }: ColorSlide
 
   return (
     <div className="space-y-5 w-full" onKeyDown={handleKeyDown}>
-      {/* Preview block */}
+      {/* Preview block - also dim when disabled */}
       <div
-        className="w-full h-24 rounded-xl border border-border shadow-sm transition-colors duration-100"
+        className={`w-full h-24 rounded-xl border border-border shadow-sm transition-all duration-100 ${
+          disabled ? 'opacity-50' : ''
+        }`}
         style={{ backgroundColor: `hsl(${color.h}, ${color.s}%, ${color.l}%)` }}
       />
 
-      {/* Hue slider */}
+      {/* Hue slider - ✅ Pass disabled */}
       <Slider
         label="Hue"
         value={color.h}
@@ -32,6 +34,7 @@ export function ColorSliders({ color, onChange, onSubmit, disabled }: ColorSlide
         min={0}
         max={360}
         step={1}
+        disabled={disabled}
         trackStyle={{
           background: `linear-gradient(to right, 
             hsl(0, 100%, 50%), 
@@ -45,7 +48,7 @@ export function ColorSliders({ color, onChange, onSubmit, disabled }: ColorSlide
         }}
       />
 
-      {/* Saturation slider */}
+      {/* Saturation slider - ✅ Pass disabled */}
       <Slider
         label="Saturation"
         value={color.s}
@@ -53,6 +56,7 @@ export function ColorSliders({ color, onChange, onSubmit, disabled }: ColorSlide
         min={0}
         max={100}
         step={1}
+        disabled={disabled}
         trackStyle={{
           background: `linear-gradient(to right, 
             hsl(${color.h}, 0%, ${color.l}%), 
@@ -61,7 +65,7 @@ export function ColorSliders({ color, onChange, onSubmit, disabled }: ColorSlide
         }}
       />
 
-      {/* Lightness slider */}
+      {/* Lightness slider - ✅ Pass disabled */}
       <Slider
         label="Lightness"
         value={color.l}
@@ -69,6 +73,7 @@ export function ColorSliders({ color, onChange, onSubmit, disabled }: ColorSlide
         min={0}
         max={100}
         step={1}
+        disabled={disabled}
         trackStyle={{
           background: `linear-gradient(to right, 
             hsl(${color.h}, ${color.s}%, 0%), 
@@ -78,8 +83,8 @@ export function ColorSliders({ color, onChange, onSubmit, disabled }: ColorSlide
         }}
       />
 
-      {/* Keyboard hint */}
-      {onSubmit && (
+      {/* Keyboard hint - hide when disabled */}
+      {onSubmit && !disabled && (
         <p className="text-center text-xs text-muted mt-2">
           Press <kbd className="px-1.5 py-0.5 bg-surface-alt rounded text-xs">Enter</kbd> or{' '}
           <kbd className="px-1.5 py-0.5 bg-surface-alt rounded text-xs">Space</kbd> to submit
