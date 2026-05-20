@@ -18,16 +18,21 @@ export default function AdminLogin() {
     setLoading(true);
     setError('');
 
-    // Simple validation - in production, you'd validate with backend
-    if (!adminKey || adminKey.length < 8) {
-      setError('Invalid admin key');
+    if (!adminKey.trim()) {
+      setError('Please enter an admin key');
       setLoading(false);
       return;
     }
 
-    // Store key - actual validation happens on API calls
-    adminLogin(adminKey);
-    navigate('/admin');
+    const success = await adminLogin(adminKey);
+    
+    if (success) {
+      navigate('/admin');
+    } else {
+      setError('Invalid admin key. Access denied.');
+    }
+    
+    setLoading(false);
   };
 
   return (
@@ -62,6 +67,7 @@ export default function AdminLogin() {
                 value={adminKey}
                 onChange={(e) => setAdminKey(e.target.value)}
                 required
+                autoFocus
                 className="w-full pl-11 pr-4 py-3 rounded-button bg-surface-alt border border-border text-deep placeholder:text-muted focus:outline-none focus:shadow-glow-primary transition-shadow"
               />
             </div>

@@ -36,6 +36,9 @@ export default function AdminUsers() {
 
   const totalPages = Math.ceil(total / limit);
   const currentPage = Math.floor(offset / limit) + 1;
+const startItem = offset + 1;
+const endItem = Math.min(offset + limit, total);
+
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
@@ -149,11 +152,12 @@ export default function AdminUsers() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-4 border-t border-border">
             <div className="text-sm text-muted">
-              Showing {offset + 1} to {Math.min(offset + limit, total)} of {total} users
+              Showing {startItem} to {endItem} of {total} users
             </div>
             <div className="flex gap-2">
               <Button
                 variant="ghost"
+                title='Previous'
                 onClick={() => setOffset(Math.max(0, offset - limit))}
                 disabled={offset === 0}
               >
@@ -164,6 +168,7 @@ export default function AdminUsers() {
               </span>
               <Button
                 variant="ghost"
+                title='Next'
                 onClick={() => setOffset(Math.min(total - limit, offset + limit))}
                 disabled={offset + limit >= total}
               >

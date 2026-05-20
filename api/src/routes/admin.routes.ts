@@ -7,7 +7,9 @@ const router = Router();
 
 // Apply admin auth to all routes
 router.use(adminAuthMiddleware);
-
+router.get('/verify', adminAuthMiddleware, (req, res) => {
+  res.json({ success: true, message: 'Admin key is valid' });
+});
 // Dashboard stats
 router.get('/stats', async (req, res) => {
   try {

@@ -2,19 +2,21 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Users, UserCheck, Gamepad2, Activity, Star, MessageSquare, 
-  RefreshCw, TrendingUp, AlertCircle, CheckCircle, XCircle 
+  RefreshCw, TrendingUp,
 } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { AdminStats } from '../types/admin';
 import { toast } from 'sonner';
+import { LogOut } from 'lucide-react';
+import { useAdmin } from '../context/AdminContext';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
+  const { adminLogout } = useAdmin();
   const loadStats = async () => {
     try {
       const response = await adminApi.getStats();
@@ -77,13 +79,6 @@ export default function AdminDashboard() {
       bg: 'bg-purple-500/10',
     },
     {
-      title: 'Casual Games',
-      value: stats?.totalCasualGames || 0,
-      icon: Activity,
-      color: 'text-orange-500',
-      bg: 'bg-orange-500/10',
-    },
-    {
       title: 'Active (24h)',
       value: stats?.activeUsers24h || 0,
       icon: TrendingUp,
@@ -108,20 +103,28 @@ export default function AdminDashboard() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
-      {/* Header */}
+      {/* Header */}  
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="font-heading text-3xl font-bold text-deep">Admin Dashboard</h1>
           <p className="text-muted text-sm mt-1">Manage users, feedback, and system settings</p>
         </div>
-        <Button 
-        //   variant="outline" 
-          icon={<RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />}
-          onClick={handleRefreshLeaderboard}
-          disabled={refreshing}
-        >
-          Refresh Leaderboard
-        </Button>
+<div className="flex items-center gap-3">
+  <Button 
+    icon={<RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />}
+    onClick={handleRefreshLeaderboard}
+    disabled={refreshing}
+  >
+    Refresh Leaderboard
+  </Button>
+  <Button 
+    variant="ghost" 
+    icon={<LogOut className="w-4 h-4" />}
+    onClick={() => { adminLogout(); window.location.href = '/admin'; }}
+  >
+    Logout
+  </Button>
+</div>
       </div>
 
       {/* Stats Grid */}
@@ -203,14 +206,6 @@ export default function AdminDashboard() {
                 <span className="text-muted">Active Ratio (24h)</span>
                 <span className="font-medium">
                   {stats?.totalUsers ? Math.round((stats.activeUsers24h / stats.totalUsers) * 100) : 0}%
-                </span>
-              </div>
-              <div className="flex justify-between py-2">
-                <span className="text-muted">Competitive vs Casual</span>
-                <span className="font-medium">
-                  {stats?.totalCompetitiveGames && stats?.totalCasualGames
-                    ? Math.round((stats.totalCompetitiveGames / (stats.totalCompetitiveGames + stats.totalCasualGames)) * 100)
-                    : 0}% Comp
                 </span>
               </div>
             </div>

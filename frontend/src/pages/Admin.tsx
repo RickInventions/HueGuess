@@ -1,23 +1,49 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAdmin } from '../context/AdminContext';
+import { AdminRoute } from '../components/admin/AdminRoute';
 import AdminLogin from './AdminLogin';
 import AdminDashboard from './AdminDashboard';
 import AdminUsers from './AdminUsers';
 import AdminFeedback from './AdminFeedback';
 
 export default function Admin() {
-  const { isAdminAuthenticated } = useAdmin();
-
-  if (!isAdminAuthenticated) {
-    return <AdminLogin />;
-  }
-
   return (
     <Routes>
-      <Route path="/" element={<AdminDashboard />} />
-      <Route path="/users" element={<AdminUsers />} />
-      <Route path="/feedback" element={<AdminFeedback />} />
-      <Route path="*" element={<Navigate to="/admin" />} />
+      <Route path="login" element={<AdminLogin />} />
+      <Route
+        path="dashboard"
+        element={
+          <AdminRoute>
+            <AdminDashboard />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="users"
+        element={
+          <AdminRoute>
+            <AdminUsers />
+          </AdminRoute>
+        }
+      />
+      <Route
+        path="feedback"
+        element={
+          <AdminRoute>
+            <AdminFeedback />
+          </AdminRoute>
+        }
+      />
+      {/* Root path: redirect to dashboard if authenticated, else to login */}
+      <Route
+        path="/"
+        element={
+          <AdminRoute>
+            <Navigate to="/admin/dashboard" replace />
+          </AdminRoute>
+        }
+      />
+      {/* Catch-all: redirect to root */}
+      <Route path="*" element={<Navigate to="/admin" replace />} />
     </Routes>
   );
 }

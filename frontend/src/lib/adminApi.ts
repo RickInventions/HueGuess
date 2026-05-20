@@ -8,50 +8,62 @@ const getAdminKey = () => {
   return key;
 };
 
+// Create axios instance with interceptor for 401
+const adminAxios = axios.create();
+
+adminAxios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Invalid admin key - clear storage and redirect
+      localStorage.removeItem('adminKey');
+      window.dispatchEvent(new Event('admin:logout'));
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const adminApi = {
-  // Dashboard
+  verify: async () => {
+    const response = await adminAxios.get(`${API_URL}/admin/verify`, {
+      headers: { 'X-Admin-Key': getAdminKey() }
+    });
+    return response.data;
+  },
   getStats: async () => {
-    const response = await axios.get(`${API_URL}/admin/stats`, {
+    const response = await adminAxios.get(`${API_URL}/admin/stats`, {
       headers: { 'X-Admin-Key': getAdminKey() }
     });
     return response.data;
   },
-
-  // User management
   getUsers: async (params: { search?: string; limit?: number; offset?: number }) => {
-    const response = await axios.get(`${API_URL}/admin/users`, {
+    const response = await adminAxios.get(`${API_URL}/admin/users`, {
       params,
       headers: { 'X-Admin-Key': getAdminKey() }
     });
     return response.data;
   },
-
   getUserDetails: async (userId: string) => {
-    const response = await axios.get(`${API_URL}/admin/users/${userId}`, {
+    const response = await adminAxios.get(`${API_URL}/admin/users/${userId}`, {
       headers: { 'X-Admin-Key': getAdminKey() }
     });
     return response.data;
   },
-
-  // Feedback management
   getFeedback: async (params: { resolved?: boolean; type?: string; limit?: number; offset?: number }) => {
-    const response = await axios.get(`${API_URL}/admin/feedback`, {
+    const response = await adminAxios.get(`${API_URL}/admin/feedback`, {
       params,
       headers: { 'X-Admin-Key': getAdminKey() }
     });
     return response.data;
   },
-
   resolveFeedback: async (id: string) => {
-    const response = await axios.put(`${API_URL}/admin/feedback/${id}/resolve`, {}, {
+    const response = await adminAxios.put(`${API_URL}/admin/feedback/${id}/resolve`, {}, {
       headers: { 'X-Admin-Key': getAdminKey() }
     });
     return response.data;
   },
-
-  // System
   refreshLeaderboard: async () => {
-    const response = await axios.post(`${API_URL}/admin/refresh-leaderboard`, {}, {
+    const response = await adminAxios.post(`${API_URL}/admin/refresh-leaderboard`, {}, {
       headers: { 'X-Admin-Key': getAdminKey() }
     });
     return response.data;
