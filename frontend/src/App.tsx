@@ -15,6 +15,7 @@ import Achievements from './pages/Achievements';
 import FAQ from './pages/FAQ'
 import Support from './pages/Support'
 import Admin from './pages/Admin';
+import NotFound from './pages/NotFound';
 
 // Placeholder pages (to be implemented later)
 const Challenge = () => <div className="p-8 text-center">Challenge Mode (Coming Soon)</div>;
@@ -88,6 +89,7 @@ function App() {
             path="/room/:code" 
             element={isAuthenticated && isVerified ? <Room /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />} 
           />
+          <Route path="/*" element={<NotFound />} />
         </Routes>
       </main>
     </>
