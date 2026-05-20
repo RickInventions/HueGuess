@@ -196,139 +196,141 @@ export default function Game() {
   const isLoading = !currentColor && !result && !showDifficultySelect && phase !== 'result'
 
   return (
-    <div className="max-w-game mx-auto px-4 py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={handleGoHome}
-          className="flex items-center gap-1 text-muted hover:text-deep transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span className="text-sm">Exit</span>
-        </button>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+      <div className="max-w-game mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={handleGoHome}
+            className="flex items-center gap-1 text-muted hover:text-deep transition-colors p-2 -ml-2 active:scale-95 touch-manipulation"
+          >
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="text-xs sm:text-sm">Exit</span>
+          </button>
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium text-muted bg-surface-alt px-3 py-1 rounded-full capitalize">
-            {mode}
-          </span>
-          {selectedDifficulty && phase !== 'result' && (
-            <span className="text-xs font-medium text-muted bg-surface-alt px-3 py-1 rounded-full capitalize">
-              {selectedDifficulty}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <span className="text-[10px] sm:text-xs font-medium text-muted bg-surface-alt px-2 sm:px-3 py-1 rounded-full capitalize">
+              {mode}
             </span>
-          )}
-        </div>
-      </div>
-
-      {/* Loading state */}
-      {isLoading && (
-        <div className="flex items-center justify-center py-20">
-          <div className="text-center space-y-4">
-            <div className="w-10 h-10 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="text-muted text-sm">Loading color...</p>
+            {selectedDifficulty && phase !== 'result' && (
+              <span className="text-[10px] sm:text-xs font-medium text-muted bg-surface-alt px-2 sm:px-3 py-1 rounded-full capitalize">
+                {selectedDifficulty}
+              </span>
+            )}
           </div>
         </div>
-      )}
 
-      <AnimatePresence mode="wait">
-        {/* Difficulty Select */}
-        {showDifficultySelect && (
-          <motion.div
-            key="difficulty-select"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="pt-4"
-          >
-            <DifficultySelect
-              onSelect={handleDifficultySelect}
-              unlockedDifficulties={['easy', 'medium', 'hard', 'extreme']}
-              currentTier="All unlocked"
-              mode={mode}
-            />
-          </motion.div>
+        {/* Loading state */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-16 sm:py-20">
+            <div className="text-center space-y-3 sm:space-y-4">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+              <p className="text-muted text-xs sm:text-sm">Loading color...</p>
+            </div>
+          </div>
         )}
 
-        {/* Game Content */}
-        {!showDifficultySelect && currentColor && !isLoading && (
-          <motion.div
-            key="game-content"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="space-y-6"
-          >
-            {/* Timer Bar */}
-            {(phase === 'memorization' || phase === 'reconstruction') && (
-              <TimerBar
-                timeRemaining={activeTimer.timeRemaining}
-                totalTime={phase === 'memorization' ? config?.colorTimeSeconds || 6 : config?.roundTimeSeconds || 35}
-                label={timerLabel}
-                isUrgent={activeTimer.isUrgent}
+        <AnimatePresence mode="wait">
+          {/* Difficulty Select */}
+          {showDifficultySelect && (
+            <motion.div
+              key="difficulty-select"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="pt-2 sm:pt-4"
+            >
+              <DifficultySelect
+                onSelect={handleDifficultySelect}
+                unlockedDifficulties={['easy', 'medium', 'hard', 'extreme']}
+                currentTier="All unlocked"
+                mode={mode}
               />
-            )}
+            </motion.div>
+          )}
 
-            {/* Memorize Phase */}
-            {phase === 'memorization' && (
-              <div className="space-y-6">
-                <ColorDisplay color={currentColor} showControls={false} />
-                <p className="text-center text-sm text-muted">
-                  Memorize this color before it disappears
-                </p>
-              </div>
-            )}
-
-            {/* Reconstruction Phase */}
-            {phase === 'reconstruction' && (
-              <div className="space-y-6">
-                <ColorSliders
-                  color={userColor}
-                  onChange={handleColorChange}
-                  onSubmit={handleSubmit}
-                  disabled={isSubmitting}
+          {/* Game Content */}
+          {!showDifficultySelect && currentColor && !isLoading && (
+            <motion.div
+              key="game-content"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="space-y-4 sm:space-y-6"
+            >
+              {/* Timer Bar */}
+              {(phase === 'memorization' || phase === 'reconstruction') && (
+                <TimerBar
+                  timeRemaining={activeTimer.timeRemaining}
+                  totalTime={phase === 'memorization' ? config?.colorTimeSeconds || 6 : config?.roundTimeSeconds || 35}
+                  label={timerLabel}
+                  isUrgent={activeTimer.isUrgent}
                 />
+              )}
 
-                <button
-                  onClick={handleSubmit}
-                  disabled={isSubmitting}
-                  className="w-full bg-gradient-to-r from-primary to-accent text-white py-3 rounded-xl font-semibold hover:opacity-90 transition-all disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Submitting...' : 'Submit Guess'}
-                </button>
-              </div>
-            )}
+              {/* Memorize Phase */}
+              {phase === 'memorization' && (
+                <div className="space-y-4 sm:space-y-6">
+                  <ColorDisplay color={currentColor} showControls={false} />
+                  <p className="text-center text-xs sm:text-sm text-muted px-2">
+                    Memorize this color before it disappears
+                  </p>
+                </div>
+              )}
 
-            {/* Result Phase */}
-            {phase === 'result' && result && (
-              <div className="space-y-6">
-                <ResultCard
-                  result={result}
-                  difficulty={selectedDifficulty || undefined}
-                  huePoints={huePointsUpdate}
-                  newlyUnlocked={newlyUnlocked}
-                  mode={mode}
-                />
+              {/* Reconstruction Phase */}
+              {phase === 'reconstruction' && (
+                <div className="space-y-4 sm:space-y-6">
+                  <ColorSliders
+                    color={userColor}
+                    onChange={handleColorChange}
+                    onSubmit={handleSubmit}
+                    disabled={isSubmitting}
+                  />
 
-                <div className="flex gap-3">
                   <button
-                    onClick={handleRetry}
-                    className="flex-1 bg-gradient-to-r from-primary to-accent text-white py-3 rounded-xl font-semibold hover:opacity-90 transition-all"
+                    onClick={handleSubmit}
+                    disabled={isSubmitting}
+                    className="w-full bg-gradient-to-r from-primary to-accent text-white py-3 sm:py-4 rounded-xl font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 text-sm sm:text-base touch-manipulation"
                   >
-                    <RefreshCw className="w-4 h-4 inline mr-2" />
-                    Play Again
-                  </button>
-                  <button
-                    onClick={handleGoHome}
-                    className="flex-1 bg-surface-alt text-deep py-3 rounded-xl font-semibold hover:bg-surface-alt/80 transition-all"
-                  >
-                    <Home className="w-4 h-4 inline mr-2" />
-                    Home
+                    {isSubmitting ? 'Submitting...' : 'Submit Guess'}
                   </button>
                 </div>
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+              )}
+
+              {/* Result Phase */}
+              {phase === 'result' && result && (
+                <div className="space-y-4 sm:space-y-6">
+                  <ResultCard
+                    result={result}
+                    difficulty={selectedDifficulty || undefined}
+                    huePoints={huePointsUpdate}
+                    newlyUnlocked={newlyUnlocked}
+                    mode={mode}
+                  />
+
+                  <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                    <button
+                      onClick={handleRetry}
+                      className="w-full sm:flex-1 bg-gradient-to-r from-primary to-accent text-white py-3 sm:py-4 rounded-xl font-semibold hover:opacity-90 active:scale-[0.98] transition-all text-sm sm:text-base touch-manipulation"
+                    >
+                      <RefreshCw className="w-4 h-4 inline mr-2" />
+                      Play Again
+                    </button>
+                    <button
+                      onClick={handleGoHome}
+                      className="w-full sm:flex-1 bg-surface-alt text-deep py-3 sm:py-4 rounded-xl font-semibold hover:bg-surface-alt/80 active:scale-[0.98] transition-all text-sm sm:text-base touch-manipulation"
+                    >
+                      <Home className="w-4 h-4 inline mr-2" />
+                      Home
+                    </button>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }

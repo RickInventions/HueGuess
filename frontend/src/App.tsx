@@ -14,6 +14,7 @@ import Leaderboard from './pages/Leaderboard';
 import Achievements from './pages/Achievements';
 import FAQ from './pages/FAQ'
 import Support from './pages/Support'
+import Admin from './pages/Admin';
 
 // Placeholder pages (to be implemented later)
 const Challenge = () => <div className="p-8 text-center">Challenge Mode (Coming Soon)</div>;
@@ -51,7 +52,7 @@ function App() {
   return (
     <>
       <Navbar />
-      <main className="pt-16">
+      <main>
         <Routes>
           {/* Public routes - always accessible */}
           <Route path="/" element={<Home />} />
@@ -65,7 +66,7 @@ function App() {
           <Route path="/achievements" element={<Achievements />} />
           <Route path="/faq" element={<FAQ />} />
           <Route path="/support" element={<Support />} />
-          
+          <Route path="/admin/*" element={<Admin />} />
           {/* Protected routes - require authentication */}
           <Route 
             path="/profile" 

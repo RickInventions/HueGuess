@@ -5,11 +5,13 @@ import { Toaster } from 'sonner'
 import App from './App'
 import './index.css'
 import  { AuthProvider } from './context/AuthContext'
+import { AdminProvider } from './context/AdminContext'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
+        <AdminProvider>
         <App />
         <Toaster
           position="bottom-center"
@@ -24,6 +26,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             },
           }}
         />
+        </AdminProvider>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,
