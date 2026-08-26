@@ -15,6 +15,20 @@ function hslString(c: HSLColor): string {
   return `hsl(${c.h}, ${c.s}%, ${c.l}%)`
 }
 
+/** Compact HSL readout — the same shape used for the target, so they compare at a glance. */
+function hslLabel(c: HSLColor): string {
+  return `H ${Math.round(c.h)} · S ${Math.round(c.s)} · L ${Math.round(c.l)}`
+}
+
+/** Signed per-channel drift from the target, e.g. "+4 / −2 / +11". */
+function hslDelta(guess: HSLColor, target: HSLColor): string {
+  const fmt = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(Math.round(n))}`
+  // Hue is a circle: 350° vs 10° is 20° apart, not 340°.
+  let dh = ((guess.h - target.h + 540) % 360) - 180
+  if (Object.is(dh, -0)) dh = 0
+  return `${fmt(dh)} / ${fmt(guess.s - target.s)} / ${fmt(guess.l - target.l)}`
+}
+
 function accuracyTone(accuracy: number): string {
   if (accuracy >= 90) return 'text-success'
   if (accuracy >= 70) return 'text-primary'
@@ -39,9 +53,7 @@ export function RoundResults({ results, targetColor, currentUserId, round }: Rou
           />
           <div className="min-w-0">
             <p className="text-xs font-medium">The colour was</p>
-            <p className="text-xs text-muted font-mono">
-              H {Math.round(targetColor.h)} · S {Math.round(targetColor.s)} · L {Math.round(targetColor.l)}
-            </p>
+            <p className="text-xs text-muted font-mono">{hslLabel(targetColor)}</p>
           </div>
         </div>
       )}
@@ -73,17 +85,25 @@ export function RoundResults({ results, targetColor, currentUserId, round }: Rou
                 {result.username}
                 {isYou && <span className="ml-1.5 text-[10px] uppercase tracking-wide text-primary">You</span>}
               </p>
-              {result.cumulativeAverage !== undefined && (
-                <p className="text-xs text-muted font-mono">{result.cumulativeAverage.toFixed(1)}% avg</p>
+              {result.isTimeout ? (
+                <span className="inline-flex items-center gap-1 text-xs text-accent">
+                  <Clock className="w-3 h-3" />
+                  No guess
+                </span>
+              ) : (
+                <p className="text-[11px] text-muted font-mono truncate">
+                  {hslLabel(result.userColor)}
+                  {targetColor && (
+                    <span className="hidden sm:inline text-muted/70">
+                      {' · Δ '}
+                      {hslDelta(result.userColor, targetColor)}
+                    </span>
+                  )}
+                </p>
               )}
             </div>
 
-            {result.isTimeout ? (
-              <span className="inline-flex items-center gap-1 text-xs text-accent shrink-0">
-                <Clock className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">No guess</span>
-              </span>
-            ) : (
+            {!result.isTimeout && (
               <div className="flex items-center gap-1 shrink-0">
                 {targetColor && (
                   <div
@@ -95,14 +115,21 @@ export function RoundResults({ results, targetColor, currentUserId, round }: Rou
                 <div
                   className="w-5 h-5 rounded-md border border-border"
                   style={{ backgroundColor: hslString(result.userColor) }}
-                  aria-label={`${result.username}'s guess`}
+                  aria-label={`${result.username}'s guess — ${hslLabel(result.userColor)}`}
                 />
               </div>
             )}
 
-            <span className={`font-heading font-semibold text-sm shrink-0 w-14 text-right ${accuracyTone(result.accuracy)}`}>
-              {result.accuracy.toFixed(1)}%
-            </span>
+            <div className="shrink-0 w-14 text-right">
+              <span className={`font-heading font-semibold text-sm ${accuracyTone(result.accuracy)}`}>
+                {result.accuracy.toFixed(1)}%
+              </span>
+              {result.cumulativeAverage !== undefined && (
+                <p className="text-[10px] text-muted font-mono leading-tight">
+                  {result.cumulativeAverage.toFixed(1)} avg
+                </p>
+              )}
+            </div>
           </motion.div>
         )
       })}

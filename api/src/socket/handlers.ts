@@ -351,7 +351,13 @@ function reactToRoomChange(io: Server, roomCode: string): void {
     }
     if (room.phase === 'reconstruction' && roomManager.allConnectedSubmitted(room)) {
       endRound(io, roomCode);
+      return;
     }
+    // Membership just changed, so the "x of y submitted" figures moved without
+    // anyone submitting. Without this the clients keep showing the old counts —
+    // still waiting on a player who has already left.
+    const { submitted, total } = roomManager.getSubmissionProgress(room);
+    io.to(roomCode).emit('submit_progress', { submittedCount: submitted, totalPlayers: total });
     return;
   }
 

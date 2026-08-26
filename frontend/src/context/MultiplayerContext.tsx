@@ -394,6 +394,9 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       setPlayers(data.players);
       setRoundResults([]);
       setSubmittedCount(0);
+      // Reset the denominator too — carrying last round's total over shows a
+      // stale "x of y" until the first submission lands.
+      setTotalSubmitters(data.players.filter(p => p.status !== 'disconnected').length);
       setHasSubmitted(false);
       setCountdown(null);
       setIsFinalRound(false);
@@ -407,6 +410,13 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     };
 
     const onPlayerSubmitted = (data: { submittedCount: number; totalPlayers: number }) => {
+      setSubmittedCount(data.submittedCount);
+      setTotalSubmitters(data.totalPlayers);
+    };
+
+    // Same counts, but sent because the room's membership changed mid-round
+    // rather than because someone submitted.
+    const onSubmitProgress = (data: { submittedCount: number; totalPlayers: number }) => {
       setSubmittedCount(data.submittedCount);
       setTotalSubmitters(data.totalPlayers);
     };
@@ -586,6 +596,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     socket.on('round_started', onRoundStarted);
     socket.on('reconstruction_started', onReconstructionStarted);
     socket.on('player_submitted', onPlayerSubmitted);
+    socket.on('submit_progress', onSubmitProgress);
     socket.on('submit_ack', onSubmitAck);
     socket.on('round_ended', onRoundEnded);
     socket.on('round_interval', onRoundInterval);
@@ -618,6 +629,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       socket.off('round_started', onRoundStarted);
       socket.off('reconstruction_started', onReconstructionStarted);
       socket.off('player_submitted', onPlayerSubmitted);
+      socket.off('submit_progress', onSubmitProgress);
       socket.off('submit_ack', onSubmitAck);
       socket.off('round_ended', onRoundEnded);
       socket.off('round_interval', onRoundInterval);

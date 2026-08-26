@@ -1,13 +1,14 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Copy, Check, LogOut, AlertTriangle, MessageCircle, Share2, Users } from 'lucide-react'
+import { ArrowLeft, Copy, Check, LogOut, AlertTriangle, Share2, Users } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useMultiplayer } from '../hooks/useMultiplayer'
 import { soundService } from '../services/soundService'
 import { RoomSetup } from '../components/multiplayer/RoomSetup'
 import { JoinForm } from '../components/multiplayer/JoinForm'
 import { PlayerList } from '../components/multiplayer/PlayerList'
+import { ChatPanel } from '../components/multiplayer/ChatPanel'
 import { ConnectionBanner } from '../components/multiplayer/ConnectionBanner'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -45,8 +46,6 @@ export default function Challenge() {
   const [error, setError] = useState<string | null>(
     (location.state as { message?: string } | null)?.message ?? null
   )
-  const [chatInput, setChatInput] = useState('')
-  const chatEndRef = useRef<HTMLDivElement | null>(null)
 
   const canAct = isConnected && isOnline
 
@@ -74,10 +73,6 @@ export default function Challenge() {
       navigate(`/room/${currentRoom.code}`, { replace: true })
     }
   }, [phase, currentRoom, navigate])
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [chatMessages.length])
 
   // The 3-2-1 before the first round happens here, in the lobby.
   useEffect(() => {
@@ -162,48 +157,13 @@ export default function Challenge() {
     navigate('/')
   }
 
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!chatInput.trim()) return
-    sendMessage(chatInput)
-    setChatInput('')
-  }
-
   const chatPanel = (
-    <Card className="p-4 flex flex-col">
-      <h3 className="font-heading font-semibold text-sm flex items-center gap-2 mb-3">
-        <MessageCircle className="w-4 h-4" />
-        Chat
-      </h3>
-      <div className="h-32 lg:h-64 overflow-y-auto space-y-1 mb-3 pr-1">
-        {chatMessages.length === 0 ? (
-          <p className="text-xs text-muted">No messages yet — say hello.</p>
-        ) : (
-          chatMessages.slice(-50).map((msg, i) => (
-            <div key={`${msg.timestamp}-${i}`} className="text-xs break-words">
-              <span className="font-medium text-primary">{msg.username}:</span>{' '}
-              <span className="text-muted">{msg.message}</span>
-            </div>
-          ))
-        )}
-        <div ref={chatEndRef} />
-      </div>
-      <form onSubmit={handleSendMessage} className="flex gap-2">
-        <input
-          type="text"
-          value={chatInput}
-          onChange={e => setChatInput(e.target.value)}
-          placeholder="Type a message…"
-          maxLength={200}
-          aria-label="Chat message"
-          disabled={!canAct}
-          className="flex-1 min-w-0 px-3 py-2 rounded-button bg-surface-alt border border-border text-sm focus:outline-none focus:shadow-glow-primary disabled:opacity-50"
-        />
-        <Button type="submit" disabled={!canAct || !chatInput.trim()}>
-          Send
-        </Button>
-      </form>
-    </Card>
+    <ChatPanel
+      messages={chatMessages}
+      onSend={sendMessage}
+      canSend={canAct}
+      currentUserId={user?.id}
+    />
   )
 
   return (

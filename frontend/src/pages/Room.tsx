@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Trophy, MessageCircle, LogOut, Check, Users, Loader2 } from 'lucide-react'
+import { Send, Trophy, LogOut, Check, Users, Loader2 } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useMultiplayer } from '../hooks/useMultiplayer'
 import { useSocket } from '../context/SocketContext'
@@ -11,9 +11,9 @@ import { TimerBar } from '../components/game/TimerBar'
 import { RoundResults } from '../components/multiplayer/RoundResults'
 import { RoomLeaderboard } from '../components/multiplayer/RoomLeaderboard'
 import { PlayerList } from '../components/multiplayer/PlayerList'
+import { ChatPanel } from '../components/multiplayer/ChatPanel'
 import { ConnectionBanner } from '../components/multiplayer/ConnectionBanner'
 import { Button } from '../components/ui/Button'
-import { Card } from '../components/ui/Card'
 import type { HSLColor } from '../types'
 
 /** Floor for the auto-submit fallback — no real round is shorter than this. */
@@ -60,8 +60,6 @@ export default function Room() {
   } = useMultiplayer()
 
   const [userColor, setUserColor] = useState<HSLColor>({ h: 0, s: 0, l: 0 })
-  const [chatInput, setChatInput] = useState('')
-  const chatEndRef = useRef<HTMLDivElement | null>(null)
   const autoSubmittedRef = useRef<number | null>(null)
   const enteredReconstructionRef = useRef<number | null>(null)
   const deepLinkTried = useRef(false)
@@ -200,17 +198,6 @@ export default function Room() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [phase, hasSubmitted, handleSubmit])
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ block: 'nearest' })
-  }, [chatMessages.length])
-
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!chatInput.trim()) return
-    sendMessage(chatInput)
-    setChatInput('')
-  }
-
   const handleLeaveRoom = () => {
     leaveRoom()
     navigate('/challenge', { replace: true })
@@ -235,40 +222,12 @@ export default function Room() {
   )
 
   const chatPanel = (
-    <Card className="p-4 flex flex-col">
-      <h3 className="font-heading font-semibold text-sm flex items-center gap-2 mb-3">
-        <MessageCircle className="w-4 h-4" />
-        Chat
-      </h3>
-      <div className="h-28 lg:h-56 overflow-y-auto space-y-1 mb-3 pr-1">
-        {chatMessages.length === 0 ? (
-          <p className="text-xs text-muted">No messages yet.</p>
-        ) : (
-          chatMessages.slice(-50).map((msg, i) => (
-            <div key={`${msg.timestamp}-${i}`} className="text-xs break-words">
-              <span className="font-medium text-primary">{msg.username}:</span>{' '}
-              <span className="text-muted">{msg.message}</span>
-            </div>
-          ))
-        )}
-        <div ref={chatEndRef} />
-      </div>
-      <form onSubmit={handleSendMessage} className="flex gap-2">
-        <input
-          type="text"
-          value={chatInput}
-          onChange={e => setChatInput(e.target.value)}
-          placeholder="Type a message…"
-          maxLength={200}
-          aria-label="Chat message"
-          disabled={!canAct}
-          className="flex-1 min-w-0 px-3 py-2 rounded-button bg-surface-alt border border-border text-sm focus:outline-none focus:shadow-glow-primary disabled:opacity-50"
-        />
-        <Button type="submit" disabled={!canAct || !chatInput.trim()}>
-          Send
-        </Button>
-      </form>
-    </Card>
+    <ChatPanel
+      messages={chatMessages}
+      onSend={sendMessage}
+      canSend={canAct}
+      currentUserId={user?.id}
+    />
   )
 
   // ── Still resolving a deep link ───────────────────────────────────────────
@@ -578,7 +537,14 @@ export default function Room() {
             currentUserId={user?.id}
             showScores
           />
-          <div className="hidden lg:block">{chatPanel}</div>
+          {/* Rendered at every breakpoint — mid-game chat used to be desktop-only. */}
+          <ChatPanel
+            messages={chatMessages}
+            onSend={sendMessage}
+            canSend={canAct}
+            currentUserId={user?.id}
+            compact
+          />
         </div>
       </div>
     </div>
