@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { game } from '../lib/api';
-import { Difficulty, GameMode, HSLColor, RoundResult, Achievement } from '../types';
+import type { Difficulty, HSLColor, RoundResult, Achievement } from '../types';
 import { soundService } from '../services/soundService';
 
 const RELOAD_KEY = 'hue_pending_round';

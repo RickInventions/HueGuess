@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Search, ChevronLeft, ChevronRight, Eye, Shield, CheckCircle, XCircle } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Eye, CheckCircle, XCircle } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { AdminUser } from '../types/admin';
+import type { AdminUser, AdminUserDetail } from '../types/admin';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -14,7 +14,8 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [offset, setOffset] = useState(0);
-  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [selectedUser, setSelectedUser] = useState<AdminUserDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const limit = 20;
 
   const loadUsers = async () => {
@@ -27,6 +28,24 @@ export default function AdminUsers() {
       toast.error('Failed to load users');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Open with the row we already have, then enrich from the detail endpoint —
+  // the modal is usable immediately and gains streaks/tier when the fetch lands.
+  const openUser = async (user: AdminUser) => {
+    setSelectedUser(user);
+    setDetailLoading(true);
+    try {
+      const response = await adminApi.getUserDetails(user.id);
+      // Guard against a stale response after the admin closed or switched rows.
+      setSelectedUser((current) =>
+        current && current.id === user.id ? { ...current, ...response.user } : current
+      );
+    } catch {
+      toast.error('Could not load full details for this user');
+    } finally {
+      setDetailLoading(false);
     }
   };
 
@@ -135,7 +154,8 @@ const endItem = Math.min(offset + limit, total);
                     </td>
                     <td className="px-4 py-3 text-center">
                       <button
-                        onClick={() => setSelectedUser(user)}
+                        onClick={() => openUser(user)}
+                        title="View details"
                         className="text-muted hover:text-primary transition-colors"
                       >
                         <Eye className="w-4 h-4" />
@@ -182,21 +202,27 @@ const endItem = Math.min(offset + limit, total);
       {/* User Detail Modal */}
       {selectedUser && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedUser(null)}>
-          <div className="bg-surface rounded-2xl max-w-md w-full p-6" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="bg-surface rounded-2xl max-w-md w-full p-6 max-h-[90dvh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xl font-bold">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xl font-bold shrink-0">
                 {selectedUser.username.charAt(0).toUpperCase()}
               </div>
-              <div>
-                <h3 className="font-heading text-xl font-semibold">{selectedUser.username}</h3>
-                <p className="text-muted text-sm">{selectedUser.email}</p>
+              <div className="min-w-0">
+                <h3 className="font-heading text-xl font-semibold truncate">{selectedUser.username}</h3>
+                <p className="text-muted text-sm truncate">{selectedUser.email}</p>
               </div>
+              {detailLoading && (
+                <div className="ml-auto w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" />
+              )}
             </div>
 
             <div className="space-y-3">
-              <div className="flex justify-between py-2 border-b border-border">
-                <span className="text-muted">User ID</span>
-                <span className="font-mono text-xs">{selectedUser.id}</span>
+              <div className="flex justify-between py-2 border-b border-border gap-3">
+                <span className="text-muted shrink-0">User ID</span>
+                <span className="font-mono text-xs truncate">{selectedUser.id}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-border">
                 <span className="text-muted">Verified</span>
@@ -206,17 +232,45 @@ const endItem = Math.min(offset + limit, total);
                 <span className="text-muted">HuePoints</span>
                 <span className="font-semibold">{selectedUser.rating || 100}</span>
               </div>
+              {selectedUser.rank_tier && (
+                <div className="flex justify-between py-2 border-b border-border">
+                  <span className="text-muted">Rank</span>
+                  <span className="capitalize">{selectedUser.rank_tier}</span>
+                </div>
+              )}
               <div className="flex justify-between py-2 border-b border-border">
                 <span className="text-muted">Games Played</span>
                 <span>{selectedUser.games_played || 0}</span>
               </div>
+              {selectedUser.total_games != null && (
+                <div className="flex justify-between py-2 border-b border-border">
+                  <span className="text-muted">Rounds Recorded</span>
+                  <span>{Number(selectedUser.total_games)}</span>
+                </div>
+              )}
               <div className="flex justify-between py-2 border-b border-border">
                 <span className="text-muted">Avg Accuracy</span>
                 <span>{Math.round(selectedUser.avg_accuracy || 0)}%</span>
               </div>
-              <div className="flex justify-between py-2">
+              {selectedUser.current_streak != null && (
+                <div className="flex justify-between py-2 border-b border-border">
+                  <span className="text-muted">Streak</span>
+                  <span>
+                    {selectedUser.current_streak} · best {selectedUser.best_streak ?? 0}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between py-2 border-b border-border">
                 <span className="text-muted">Joined</span>
                 <span>{format(new Date(selectedUser.created_at), 'PPP')}</span>
+              </div>
+              <div className="flex justify-between py-2">
+                <span className="text-muted">Name changed</span>
+                <span>
+                  {selectedUser.last_username_change
+                    ? format(new Date(selectedUser.last_username_change), 'PPP')
+                    : 'Never'}
+                </span>
               </div>
             </div>
 

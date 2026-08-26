@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Users, UserCheck, Gamepad2, Activity, Star, MessageSquare, 
+import {
+  Users, UserCheck, Gamepad2, Star, MessageSquare,
   RefreshCw, TrendingUp,
 } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { AdminStats } from '../types/admin';
+import type { AdminStats } from '../types/admin';
 import { toast } from 'sonner';
 import { LogOut } from 'lucide-react';
 import { useAdmin } from '../context/AdminContext';

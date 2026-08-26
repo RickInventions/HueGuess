@@ -16,10 +16,9 @@ import FAQ from './pages/FAQ'
 import Support from './pages/Support'
 import Admin from './pages/Admin';
 import NotFound from './pages/NotFound';
-
-// Placeholder pages (to be implemented later)
-const Challenge = () => <div className="p-8 text-center">Challenge Mode (Coming Soon)</div>;
-const Room = () => <div className="p-8 text-center">Room Page (Coming Soon)</div>;
+import Challenge from './pages/Challenge';
+import Room from './pages/Room';
+import ResetPassword from './pages/ResetPassword';
 
 function App() {
   const { isAuthenticated, isLoading, isVerified } = useAuth();
@@ -63,6 +62,7 @@ function App() {
           <Route path="/verify" element={<VerifyEmail />} />
           <Route path="/verify-success" element={<VerifyEmail />} />
           <Route path="/verify-error" element={<VerifyEmail />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/achievements" element={<Achievements />} />
           <Route path="/faq" element={<FAQ />} />

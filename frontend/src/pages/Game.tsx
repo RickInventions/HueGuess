@@ -44,7 +44,7 @@ export default function Game() {
     resetGame,
   } = useGame({
     mode,
-    onGameComplete: (res, huePoints, achievements) => {
+    onGameComplete: (_res, _huePoints, achievements) => {
       if (achievements?.length) {
         achievements.forEach(() => {
           soundService.playAchievementUnlock()

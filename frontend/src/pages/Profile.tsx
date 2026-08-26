@@ -24,12 +24,11 @@ import { toast } from 'sonner'
 
 export default function Profile() {
   const { username } = useParams<{ username: string }>()
-  const { user, logout, resendVerification, checkAuth } = useAuth()
+  const { user, logout, checkAuth } = useAuth()
   const navigate = useNavigate()
-  
+
   const [profile, setProfile] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [resendingVerification, setResendingVerification] = useState(false)
   const [showUsernameModal, setShowUsernameModal] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [newUsername, setNewUsername] = useState('')
@@ -67,20 +66,6 @@ export default function Profile() {
   useEffect(() => {
     loadProfile()
   }, [loadProfile])
-
-  const handleResendVerification = async () => {
-    if (!user?.email) return
-    
-    setResendingVerification(true)
-    try {
-      await resendVerification(user.email)
-      toast.success('Verification email sent! Check your inbox.')
-    } catch (error) {
-      toast.error('Failed to resend verification email')
-    } finally {
-      setResendingVerification(false)
-    }
-  }
 
   const handleUsernameChange = async (e: React.FormEvent) => {
     e.preventDefault()

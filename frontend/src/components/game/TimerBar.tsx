@@ -1,6 +1,3 @@
-import { useEffect } from 'react'
-import { soundService } from '../../services/soundService'
-
 interface TimerBarProps {
   timeRemaining: number
   totalTime: number

@@ -36,6 +36,9 @@ export default function Achievements() {
         setUnlocked(res.data.unlocked)
         setLocked(res.data.locked)
         setStats(res.data.stats)
+        // Opening this page is the acknowledgement — clears the "new" panel on Home.
+        // Fire and forget: a failure here must not break the list that just loaded.
+        achievements.markAllSeen().catch(() => {})
       } catch (error) {
         console.error('Failed to load achievements:', error)
       } finally {
@@ -44,18 +47,6 @@ export default function Achievements() {
     }
     loadAchievements()
   }, [user])
-
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'accuracy': return '🎯'
-      case 'streak': return '🔥'
-      case 'games': return '🎮'
-      case 'elo': return '🏆'
-      case 'modes': return '⚔️'
-      case 'multiplayer': return '👥'
-      default: return '🏅'
-    }
-  }
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">

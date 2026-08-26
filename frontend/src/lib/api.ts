@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Difficulty, GameRoundResponse, GameMode, HSLColor, SubmitGuessResponse, CompetitiveStats } from '../types';
+import type { Difficulty, GameRoundResponse, GameMode, HSLColor, SubmitGuessResponse, CompetitiveStats } from '../types';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
@@ -117,7 +117,10 @@ export const leaderboard = {
 export const achievements = {
   getAll: () => api.get('/achievements'),
   getMine: () => api.get('/achievements/me'),
+  /** Unlocked but not yet acknowledged — drives the "new" panel on Home. */
   getRecent: () => api.get('/achievements/recent/unseen'),
+  /** Called when the Achievements page is opened, which is what clears the panel. */
+  markAllSeen: () => api.post('/achievements/mark-all-seen'),
 };
 
 // Daily challenge endpoints
@@ -152,18 +155,7 @@ export const feedback = {
     api.post('/feedback', { type, title, description, contactEmail }),
 };
 
-// Admin endpoints (requires admin key)
-export const admin = {
-  getStats: (adminKey: string) =>
-    api.get('/admin/stats', { headers: { 'X-Admin-Key': adminKey } }),
-  getUsers: (adminKey: string, params: { search?: string; limit?: number; offset?: number }) =>
-    api.get('/admin/users', { params, headers: { 'X-Admin-Key': adminKey } }),
-  getFeedback: (adminKey: string, params: { resolved?: boolean; type?: string; limit?: number; offset?: number }) =>
-    api.get('/admin/feedback', { params, headers: { 'X-Admin-Key': adminKey } }),
-  resolveFeedback: (adminKey: string, id: string) =>
-    api.put(`/admin/feedback/${id}/resolve`, {}, { headers: { 'X-Admin-Key': adminKey } }),
-  refreshLeaderboard: (adminKey: string) =>
-    api.post('/admin/refresh-leaderboard', {}, { headers: { 'X-Admin-Key': adminKey } }),
-};
+// Admin endpoints live in ./adminApi — it sources the key from localStorage and
+// clears it on a 401. Don't add a second admin client here.
 
 export default api;

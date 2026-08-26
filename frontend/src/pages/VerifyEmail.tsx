@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { user, resendVerification, checkAuth } = useAuth()
+  const { user, checkAuth } = useAuth()
   
   const tokenFromUrl = searchParams.get('token')
   const emailFromUrl = searchParams.get('email') || user?.email || ''

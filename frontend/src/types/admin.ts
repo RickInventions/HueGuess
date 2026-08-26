@@ -20,6 +20,17 @@ export interface AdminUser {
   last_username_change: string | null;
 }
 
+/**
+ * What GET /admin/users/:userId adds over a list row. Optional because the
+ * detail modal opens with the row data and fills these in once the fetch lands.
+ */
+export interface AdminUserDetail extends AdminUser {
+  rank_tier?: string | null;
+  current_streak?: number | null;
+  best_streak?: number | null;
+  total_games?: number | string | null;
+}
+
 export interface FeedbackItem {
   id: string;
   type: 'bug' | 'feature' | 'review' | 'other';

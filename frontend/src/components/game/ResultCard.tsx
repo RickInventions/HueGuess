@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { useEffect, useState, useRef } from 'react'
-import { Check, X, Trophy, TrendingUp, Zap } from 'lucide-react'
+import { Trophy, TrendingUp, Zap } from 'lucide-react'
 import type { RoundResult, Difficulty, Achievement } from '../../types'
 
 interface ResultCardProps {
@@ -59,7 +59,6 @@ function getAccuracyMessage(accuracy: number): string {
 
 export function ResultCard({ result, difficulty, mode, huePoints, newlyUnlocked }: ResultCardProps) {
   const message = getAccuracyMessage(result.accuracy)
-  const isNegative = result.isNegative
 
   return (
     <motion.div

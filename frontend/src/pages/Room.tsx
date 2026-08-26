@@ -1,207 +1,487 @@
-// import { useEffect, useState } from 'react'
-// import { useNavigate } from 'react-router-dom'
-// import { motion, AnimatePresence } from 'framer-motion'
-// import { Send, Clock, Eye } from 'lucide-react'
-// import { useMultiplayer } from '../hooks/useMultiplayer'
-// import { ColorSliders } from '../components/game/ColorSliders'
-// import { RoundResults } from '../components/multiplayer/RoundResults'
-// import { RoomLeaderboard } from '../components/multiplayer/RoomLeaderboard'
-// import { Button } from '../components/ui/Button'
-// import { useTimer } from '../hooks/useTimer'
+import { useNavigate, useParams } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Send, Trophy, MessageCircle, LogOut, Check, Users, Loader2 } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useMultiplayer } from '../hooks/useMultiplayer'
+import { useAuth } from '../context/AuthContext'
+import { soundService } from '../services/soundService'
+import { ColorSliders } from '../components/game/ColorSliders'
+import { TimerBar } from '../components/game/TimerBar'
+import { RoundResults } from '../components/multiplayer/RoundResults'
+import { RoomLeaderboard } from '../components/multiplayer/RoomLeaderboard'
+import { PlayerList } from '../components/multiplayer/PlayerList'
+import { ConnectionBanner } from '../components/multiplayer/ConnectionBanner'
+import { Button } from '../components/ui/Button'
+import { Card } from '../components/ui/Card'
+import type { HSLColor } from '../types'
 
-// export default function Room() {
-//   const navigate = useNavigate()
-//   const mp = useMultiplayer()
-//   const [phase, setPhase] = useState<'loading' | 'memorize' | 'reconstruct'>('loading')
+export default function Room() {
+  const navigate = useNavigate()
+  const { code } = useParams<{ code: string }>()
+  const { user } = useAuth()
+  const {
+    currentRoom,
+    players,
+    phase,
+    currentRound,
+    totalRounds,
+    roundResults,
+    targetColor,
+    leaderboard,
+    chatMessages,
+    countdown,
+    currentColor,
+    submittedCount,
+    totalSubmitters,
+    hasSubmitted,
+    playAgainVotes,
+    playAgainNeeded,
+    timeRemaining,
+    sessionEnded,
+    isConnected,
+    isOnline,
+    isReconnecting,
+    connectionMessage,
+    retryConnection,
+    submitColor,
+    playAgain,
+    endRoom,
+    leaveRoom,
+    sendMessage,
+    setReady,
+    joinRoom,
+  } = useMultiplayer()
 
-//   useEffect(() => {
-//     if (mp.status === 'playing') {
-//       setPhase('memorize')
-//     } else {
-//       setPhase('loading')
-//     }
-//   }, [mp.status, mp.currentRound])
+  const [userColor, setUserColor] = useState<HSLColor>({ h: 0, s: 0, l: 0 })
+  const [chatInput, setChatInput] = useState('')
+  const chatEndRef = useRef<HTMLDivElement | null>(null)
+  const autoSubmittedRef = useRef<number | null>(null)
+  const deepLinkTried = useRef(false)
 
-//   useEffect(() => {
-//     if (mp.status === 'idle' && !mp.roomCode) {
-//       if (mp.error) {
-//         navigate('/challenge', { replace: true, state: { message: mp.error } })
-//       } else {
-//         navigate('/challenge', { replace: true })
-//       }
-//     }
-//   }, [mp.status, mp.roomCode, mp.error, navigate])
+  const canAct = isConnected && isOnline
 
-//   const memTimer = useTimer({
-//     duration: mp.colorDuration || 3,
-//     autoStart: phase === 'memorize' && mp.status === 'playing',
-//     onExpire: () => setPhase('reconstruct'),
-//   })
+  // ── Derived state ─────────────────────────────────────────────────────────
+  const currentPlayer = useMemo(() => players.find(p => p.userId === user?.id), [players, user?.id])
+  const isHost = currentPlayer?.isHost ?? false
+  const isReady = currentPlayer?.status === 'ready'
+  const connectedPlayers = useMemo(() => players.filter(p => p.status !== 'disconnected'), [players])
 
-//   const roundTimer = useTimer({
-//     duration: mp.roundDuration || 20,
-//     autoStart: phase === 'reconstruct' && mp.status === 'playing',
-//   })
+  const timeLeft = timeRemaining !== null ? Math.max(0, Math.ceil(timeRemaining)) : 0
+  const totalTime =
+    phase === 'memorization'
+      ? currentRoom?.config.colorTimeSeconds ?? 0
+      : currentRoom?.config.roundTimeSeconds ?? 0
+  const isUrgent = timeLeft <= 5 && timeLeft > 0
+  const timerLabel = phase === 'memorization' ? 'Memorize' : 'Reconstruct'
 
-//   const showColor = phase === 'memorize' && mp.status === 'playing'
-//   const connectedPlayers = mp.players.filter(p => p.connected)
+  // ── Deep link: /room/CODE with no room in state → try to join it once ──────
+  useEffect(() => {
+    if (currentRoom || !code || deepLinkTried.current || !canAct) return
+    deepLinkTried.current = true
+    joinRoom(code).catch(() => {
+      navigate('/challenge', { replace: true, state: { message: 'That room is no longer available' } })
+    })
+  }, [currentRoom, code, canAct, joinRoom, navigate])
 
-//   // ─── Waiting / Countdown ───────────────
-//   if (mp.status === 'waiting' || mp.status === 'countdown') {
-//     return (
-//       <div className="max-w-game mx-auto px-4 py-12 text-center space-y-6">
-//         {mp.status === 'countdown' ? (
-//           <motion.div
-//             key="countdown"
-//             initial={{ scale: 0.5, opacity: 0 }}
-//             animate={{ scale: 1, opacity: 1 }}
-//           >
-//             <span className="font-heading text-8xl font-bold text-primary">
-//               {mp.countdown || '...'}
-//             </span>
-//             <p className="text-muted mt-4">Game starting...</p>
-//           </motion.div>
-//         ) : (
-//           <div className="space-y-3">
-//             <p className="text-muted">Waiting for game to start...</p>
-//             <p className="text-xs text-muted">
-//               {connectedPlayers.length}/{connectedPlayers.length} players · Room {mp.roomCode}
-//             </p>
-//             {connectedPlayers.length < 2 && (
-//               <p className="text-xs text-accent">Need at least 2 players</p>
-//             )}
-//           </div>
-//         )}
-//       </div>
-//     )
-//   }
+  // Host ended the session → everyone goes back to the lobby view.
+  useEffect(() => {
+    if (sessionEnded) navigate('/challenge', { replace: true })
+  }, [sessionEnded, navigate])
 
-//   // ─── Round Ended ───────────────────────
-//   if (mp.status === 'round_ended') {
-//     return (
-//       <div className="max-w-game mx-auto px-4 py-6 space-y-6">
-//         <RoundResults results={mp.roundResults} timedOut={mp.timedOut} />
-//         <RoomLeaderboard entries={mp.leaderboard} rounds={mp.currentRound} />
+  // Left the room entirely (kicked, dissolved) → leave the screen.
+  useEffect(() => {
+    if (!currentRoom && deepLinkTried.current) {
+      navigate('/challenge', { replace: true })
+    }
+  }, [currentRoom, navigate])
 
-//         <div className="space-y-3">
-//           <Button fullWidth onClick={mp.playAgain}>
-//             Play Again ({mp.playAgainVotes.length}/{connectedPlayers.length})
-//           </Button>
+  // ── Sounds ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (phase !== 'reconstruction' || timeRemaining === null) return
+    const seconds = Math.ceil(timeRemaining)
+    if (seconds <= 0) return
+    if (seconds <= 5) soundService.playUrgentTick()
+    else if (seconds === 10) soundService.playTick()
+  }, [timeRemaining === null ? null : Math.ceil(timeRemaining), phase])
 
-//           {mp.isHost && (
-//             <Button variant="secondary" fullWidth onClick={mp.endRoom}>
-//               End Session (Open Room)
-//             </Button>
-//           )}
+  useEffect(() => {
+    if (countdown !== null && countdown > 0 && countdown <= 3) soundService.playCountdownBeep()
+  }, [countdown])
 
-//           <Button
-//             variant="ghost"
-//             fullWidth
-//             onClick={() => { mp.leaveRoom(); navigate('/challenge', { replace: true }) }}
-//           >
-//             Leave Room
-//           </Button>
-//         </div>
-//       </div>
-//     )
-//   }
+  useEffect(() => {
+    if (phase === 'memorization') soundService.playRoundStart()
+    if (phase === 'reconstruction') soundService.playMemorizationEnd()
+  }, [phase])
 
-//   // ─── Playing ───────────────────────────
-//   if (mp.status === 'playing') {
-//     return (
-//       <div className="max-w-game mx-auto px-4 py-6 space-y-6">
-//         {/* Header — single inline timer, no TimerBar */}
-//         <div className="flex items-center justify-between">
-//           <span className="text-xs font-medium text-muted">
-//             Round {mp.currentRound} of {mp.totalRounds}
-//           </span>
-//           <div className="flex items-center gap-3 text-xs">
-//             {phase === 'memorize' ? (
-//               <div className="flex items-center gap-1.5 bg-surface-alt px-3 py-1.5 rounded-full">
-//                 <Eye className="w-3 h-3 text-primary" />
-//                 <span className="font-mono font-medium text-primary">
-//                   {Math.ceil(memTimer.timeLeft)}s
-//                 </span>
-//               </div>
-//             ) : (
-//               <>
-//                 <span className="text-muted">
-//                   {mp.submittedCount}/{mp.totalPlayers}
-//                 </span>
-//                 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${
-//                   roundTimer.percentage < 25 ? 'bg-accent/10' : 'bg-surface-alt'
-//                 }`}>
-//                   <Clock className={`w-3 h-3 ${
-//                     roundTimer.percentage < 25 ? 'text-accent' : 'text-muted'
-//                   }`} />
-//                   <span className={`font-mono font-medium ${
-//                     roundTimer.percentage < 25 ? 'text-accent' : 'text-muted'
-//                   }`}>
-//                     {Math.ceil(roundTimer.timeLeft)}s
-//                   </span>
-//                 </div>
-//               </>
-//             )}
-//           </div>
-//         </div>
+  // ── Round reset ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (phase === 'memorization') {
+      setUserColor({ h: 0, s: 0, l: 0 })
+      autoSubmittedRef.current = null
+    }
+  }, [phase, currentRound])
 
-//         {/* Memorization phase */}
-//         <AnimatePresence mode="wait">
-//           {showColor && mp.roundColor && (
-//             <motion.div
-//               key="memorize"
-//               initial={{ opacity: 0, scale: 0.95 }}
-//               animate={{ opacity: 1, scale: 1 }}
-//               exit={{ opacity: 0, filter: 'blur(8px)' }}
-//               transition={{ duration: 0.4 }}
-//               className="space-y-4"
-//             >
-//               <div
-//                 className="w-full aspect-square max-w-[240px] mx-auto rounded-2xl shadow-card transition-colors"
-//                 style={{
-//                   backgroundColor: `hsl(${mp.roundColor.h}, ${mp.roundColor.s}%, ${mp.roundColor.l}%)`,
-//                 }}
-//               />
-//               <p className="text-center text-sm text-muted">
-//                 Memorize this color
-//               </p>
-//             </motion.div>
-//           )}
+  const handleSubmit = useCallback(() => {
+    if (hasSubmitted || phase !== 'reconstruction') return
+    submitColor(userColor)
+    soundService.playSubmitDing()
+  }, [hasSubmitted, phase, submitColor, userColor])
 
-//           {/* Reconstruction phase */}
-//           {phase === 'reconstruct' && mp.status === 'playing' && (
-//             <motion.div
-//               key="reconstruct"
-//               initial={{ opacity: 0, y: 10 }}
-//               animate={{ opacity: 1, y: 0 }}
-//               transition={{ duration: 0.3 }}
-//               className="space-y-6"
-//             >
+  // Auto-submit whatever is on the sliders when the clock runs out, once per round.
+  useEffect(() => {
+    if (phase !== 'reconstruction' || hasSubmitted) return
+    if (timeRemaining === null || timeRemaining > 0) return
+    if (autoSubmittedRef.current === currentRound) return
+    autoSubmittedRef.current = currentRound
+    submitColor(userColor)
+  }, [timeRemaining, phase, hasSubmitted, currentRound, submitColor, userColor])
 
-//               <ColorSliders
-//                 color={mp.myColor}
-//                 onChange={mp.updateMyColor}
-//                 disabled={mp.hasSubmitted}
-//               />
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return
 
-//               <Button
-//                 fullWidth
-//                 onClick={mp.submitColor}
-//                 disabled={mp.hasSubmitted}
-//                 icon={<Send className="w-4 h-4" />}
-//               >
-//                 {mp.hasSubmitted ? 'Submitted ✓' : 'Submit Guess'}
-//               </Button>
-//             </motion.div>
-//           )}
-//         </AnimatePresence>
-//       </div>
-//     )
-//   }
+      if (phase === 'reconstruction' && !hasSubmitted && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault()
+        handleSubmit()
+      }
+      if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault()
+        soundService.toggleMute()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [phase, hasSubmitted, handleSubmit])
 
-//   return (
-//     <div className="max-w-game mx-auto px-4 py-12 text-center">
-//       <p className="text-muted">Loading...</p>
-//     </div>
-//   )
-// }
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [chatMessages.length])
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!chatInput.trim()) return
+    sendMessage(chatInput)
+    setChatInput('')
+  }
+
+  const handleLeaveRoom = () => {
+    leaveRoom()
+    navigate('/challenge', { replace: true })
+  }
+
+  const banner = (
+    <ConnectionBanner
+      isOnline={isOnline}
+      isConnected={isConnected}
+      isReconnecting={isReconnecting}
+      message={connectionMessage}
+      onRetry={retryConnection}
+    />
+  )
+
+  const chatPanel = (
+    <Card className="p-4 flex flex-col">
+      <h3 className="font-heading font-semibold text-sm flex items-center gap-2 mb-3">
+        <MessageCircle className="w-4 h-4" />
+        Chat
+      </h3>
+      <div className="h-28 lg:h-56 overflow-y-auto space-y-1 mb-3 pr-1">
+        {chatMessages.length === 0 ? (
+          <p className="text-xs text-muted">No messages yet.</p>
+        ) : (
+          chatMessages.slice(-50).map((msg, i) => (
+            <div key={`${msg.timestamp}-${i}`} className="text-xs break-words">
+              <span className="font-medium text-primary">{msg.username}:</span>{' '}
+              <span className="text-muted">{msg.message}</span>
+            </div>
+          ))
+        )}
+        <div ref={chatEndRef} />
+      </div>
+      <form onSubmit={handleSendMessage} className="flex gap-2">
+        <input
+          type="text"
+          value={chatInput}
+          onChange={e => setChatInput(e.target.value)}
+          placeholder="Type a message…"
+          maxLength={200}
+          aria-label="Chat message"
+          disabled={!canAct}
+          className="flex-1 min-w-0 px-3 py-2 rounded-button bg-surface-alt border border-border text-sm focus:outline-none focus:shadow-glow-primary disabled:opacity-50"
+        />
+        <Button type="submit" disabled={!canAct || !chatInput.trim()}>
+          Send
+        </Button>
+      </form>
+    </Card>
+  )
+
+  // ── Still resolving a deep link ───────────────────────────────────────────
+  if (!currentRoom) {
+    return (
+      <div className="max-w-game mx-auto px-4 py-12 space-y-6 text-center">
+        {banner}
+        <Loader2 className="w-8 h-8 mx-auto text-primary animate-spin" />
+        <p className="text-sm text-muted">Joining room {code}…</p>
+        <Button variant="ghost" onClick={() => navigate('/challenge', { replace: true })}>
+          Back to lobby
+        </Button>
+      </div>
+    )
+  }
+
+  // ── WAITING (lobby between rounds) ────────────────────────────────────────
+  if (phase === 'waiting') {
+    const showCountdown = countdown !== null && countdown > 0
+    const allReady = connectedPlayers.length >= 2 && connectedPlayers.every(p => p.status === 'ready')
+    const roundLabel = currentRound === 0 ? 'Get Ready' : `Round ${currentRound} of ${totalRounds ?? '∞'}`
+
+    return (
+      <div className="max-w-game lg:max-w-4xl mx-auto px-4 py-6 sm:py-8 space-y-6">
+        {banner}
+
+        <div className="text-center space-y-2">
+          <p className="font-heading text-xl font-semibold">{roundLabel}</p>
+          <p className="text-sm text-muted">
+            {currentRound === 0 ? 'The game starts when everyone is ready' : 'Ready up for the next round'}
+          </p>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
+          <div className="space-y-6">
+            <PlayerList
+              players={players}
+              hostSocketId={currentRoom.hostSocketId}
+              maxPlayers={currentRoom.config.maxPlayers}
+              currentUserId={user?.id}
+              showScores={currentRound > 0}
+            />
+
+            {showCountdown ? (
+              <motion.div
+                key={countdown}
+                initial={{ scale: 1.4, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="text-center py-6"
+              >
+                <span className="font-heading text-6xl sm:text-7xl font-bold text-primary">{countdown}</span>
+                <p className="text-muted mt-3 text-sm">Starting…</p>
+              </motion.div>
+            ) : (
+              <div className="space-y-3">
+                {connectedPlayers.length < 2 && (
+                  <p className="text-center text-xs text-accent">Need at least 2 connected players</p>
+                )}
+                {connectedPlayers.length >= 2 && !allReady && (
+                  <p className="text-center text-xs text-muted">Waiting for all players to ready up…</p>
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Button
+                    fullWidth
+                    variant={isReady ? 'secondary' : 'primary'}
+                    onClick={() => setReady(!isReady)}
+                    disabled={!canAct}
+                    icon={isReady ? <Check className="w-4 h-4" /> : undefined}
+                  >
+                    {isReady ? 'Unready' : 'Ready'}
+                  </Button>
+                  {isHost && (
+                    <Button variant="ghost" onClick={endRoom} disabled={!canAct}>
+                      End Session
+                    </Button>
+                  )}
+                  <Button variant="ghost" onClick={handleLeaveRoom} icon={<LogOut className="w-4 h-4" />}>
+                    Leave
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {chatPanel}
+        </div>
+      </div>
+    )
+  }
+
+  // ── GAME OVER ─────────────────────────────────────────────────────────────
+  if (phase === 'ended') {
+    const votesNeeded = playAgainNeeded || connectedPlayers.length
+    const hasVoted = leaderboard.some(e => e.socketId === currentPlayer?.socketId && e.playedAgain)
+
+    return (
+      <div className="max-w-game mx-auto px-4 py-8 sm:py-12 space-y-6">
+        {banner}
+
+        <div className="text-center space-y-3">
+          <Trophy className="w-14 h-14 sm:w-16 sm:h-16 text-yellow-500 mx-auto" />
+          <h2 className="font-heading text-2xl font-semibold">Game Over</h2>
+        </div>
+
+        <RoomLeaderboard entries={leaderboard} rounds={currentRound} currentUserId={user?.id} showVotes />
+
+        <div className="space-y-3">
+          <Button
+            fullWidth
+            onClick={playAgain}
+            disabled={!canAct || hasVoted}
+            variant={hasVoted ? 'secondary' : 'primary'}
+          >
+            {hasVoted ? 'Waiting for others' : 'Play Again'} ({playAgainVotes}/{votesNeeded})
+          </Button>
+          {isHost && (
+            <Button variant="ghost" fullWidth onClick={endRoom} disabled={!canAct}>
+              End Session
+            </Button>
+          )}
+          <Button variant="ghost" fullWidth onClick={handleLeaveRoom}>
+            Exit to Lobby
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── RESULTS ───────────────────────────────────────────────────────────────
+  if (phase === 'results') {
+    return (
+      <div className="max-w-game lg:max-w-4xl mx-auto px-4 py-6 space-y-6">
+        {banner}
+
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
+          <div className="space-y-6">
+            <RoundResults
+              results={roundResults}
+              targetColor={targetColor}
+              currentUserId={user?.id}
+              round={currentRound}
+            />
+            <RoomLeaderboard entries={leaderboard} rounds={currentRound} currentUserId={user?.id} />
+
+            <div className="space-y-3">
+              {timeRemaining !== null && timeRemaining > 0 && (
+                <p className="text-center text-xs text-muted">
+                  Next round in {Math.ceil(timeRemaining)}s — ready up now to skip the wait
+                </p>
+              )}
+              <Button
+                fullWidth
+                variant={isReady ? 'secondary' : 'primary'}
+                onClick={() => setReady(!isReady)}
+                disabled={!canAct}
+                icon={isReady ? <Check className="w-4 h-4" /> : undefined}
+              >
+                {isReady ? 'Ready ✓' : 'Ready for Next Round'}
+              </Button>
+              {isHost && (
+                <Button variant="ghost" fullWidth onClick={endRoom} disabled={!canAct}>
+                  End Session
+                </Button>
+              )}
+              <Button variant="ghost" fullWidth onClick={handleLeaveRoom}>
+                Leave Room
+              </Button>
+            </div>
+          </div>
+
+          {chatPanel}
+        </div>
+      </div>
+    )
+  }
+
+  // ── ACTIVE ROUND ──────────────────────────────────────────────────────────
+  const showColor = phase === 'memorization' && currentColor
+
+  return (
+    <div className="max-w-game lg:max-w-5xl mx-auto px-4 py-6 space-y-5">
+      {banner}
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_300px] lg:items-start">
+        <div className="space-y-5">
+          <TimerBar timeRemaining={timeLeft} totalTime={totalTime} label={timerLabel} isUrgent={isUrgent} />
+
+          <div className="flex items-center justify-between gap-3 text-xs">
+            <span className="font-medium text-muted">
+              Round {currentRound}
+              {totalRounds ? ` of ${totalRounds}` : ''}
+            </span>
+            {phase === 'reconstruction' && (
+              <span className="inline-flex items-center gap-1.5 text-muted">
+                <Users className="w-3.5 h-3.5" />
+                {submittedCount}/{totalSubmitters || connectedPlayers.length} submitted
+              </span>
+            )}
+          </div>
+
+          <AnimatePresence mode="wait">
+            {showColor && currentColor && (
+              <motion.div
+                key="memorize"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, filter: 'blur(8px)' }}
+                transition={{ duration: 0.4 }}
+                className="space-y-4"
+              >
+                <div
+                  className="w-full aspect-square max-w-[240px] sm:max-w-[280px] mx-auto rounded-2xl shadow-card"
+                  style={{ backgroundColor: `hsl(${currentColor.h}, ${currentColor.s}%, ${currentColor.l}%)` }}
+                />
+                <p className="text-center text-sm text-muted">Memorize this color</p>
+              </motion.div>
+            )}
+
+            {phase === 'reconstruction' && (
+              <motion.div
+                key="reconstruct"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+                className="space-y-6"
+              >
+                <ColorSliders
+                  color={userColor}
+                  onChange={(channel, value) => setUserColor(prev => ({ ...prev, [channel]: value }))}
+                  disabled={hasSubmitted}
+                  onSubmit={handleSubmit}
+                />
+                <Button
+                  fullWidth
+                  onClick={handleSubmit}
+                  disabled={hasSubmitted || !canAct}
+                  icon={<Send className="w-4 h-4" />}
+                >
+                  {hasSubmitted ? 'Submitted ✓' : 'Submit Guess'}
+                </Button>
+                {hasSubmitted && (
+                  <p className="text-center text-sm text-muted">
+                    Waiting for the other players…
+                  </p>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <Button variant="ghost" fullWidth onClick={handleLeaveRoom} icon={<LogOut className="w-4 h-4" />}>
+            Leave Game
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          <PlayerList
+            players={players}
+            hostSocketId={currentRoom.hostSocketId}
+            maxPlayers={currentRoom.config.maxPlayers}
+            currentUserId={user?.id}
+            showScores
+          />
+          <div className="hidden lg:block">{chatPanel}</div>
+        </div>
+      </div>
+    </div>
+  )
+}

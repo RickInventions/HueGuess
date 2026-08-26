@@ -1,17 +1,10 @@
-import { Link, useLocation } from 'react-router-dom'
-import { Palette, LogOut, User, ShieldCheck, AlertCircle } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Palette, User, ShieldCheck, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { Button } from '../ui/Button'
-import { toast } from 'sonner'
 
 export function Navbar() {
-  const { user, logout, isVerified } = useAuth()
-  const location = useLocation()
-
-  const handleLogout = () => {
-    logout()
-    toast.success('Logged out successfully')
-  }
+  const { user, isVerified } = useAuth()
 
   return (
     <nav className="sticky top-0 z-50 bg-base/80 backdrop-blur-md border-b border-border">

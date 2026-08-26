@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
+import type { ReactNode } from 'react';
 import { auth } from '../lib/api';
-import { User } from '../types';
+import type { User } from '../types';
 import { toast } from 'sonner';
 
 interface AuthContextType {

@@ -1,4 +1,3 @@
-import { motion, AnimatePresence } from 'framer-motion'
 import type { HSLColor } from '../../types'
 
 interface ColorDisplayProps {

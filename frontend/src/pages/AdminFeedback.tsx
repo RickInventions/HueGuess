@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Filter, CheckCircle, XCircle, Bug, Lightbulb, Star, MessageSquare, 
-  ChevronLeft, ChevronRight, ExternalLink 
+import {
+  CheckCircle, Bug, Lightbulb, Star, MessageSquare,
+  ChevronLeft, ChevronRight, ExternalLink
 } from 'lucide-react';
 import { adminApi } from '../lib/adminApi';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { FeedbackItem, FeedbackStats } from '../types/admin';
+import type { FeedbackItem, FeedbackStats } from '../types/admin';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 

@@ -1,15 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  Coffee, Swords, ArrowRight, Trophy, User, Users, Calendar, 
-  Search, Medal, Sparkles, TrendingUp, Crown, Target, Zap,
-  GitFork, Palette 
+import {
+  Coffee, Swords, ArrowRight, Trophy, User, Users, Calendar,
+  Search, Medal, TrendingUp, Crown
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { leaderboard, achievements, user as userApi } from '../lib/api'
 import { Card } from '../components/ui/Card'
-import { Button } from '../components/ui/Button'
 import { toast } from 'sonner'
 
 interface GlobalStats {
@@ -263,7 +261,7 @@ export default function Home() {
               </Link>
 
               {/* Challenge Mode */}
-              {/* <Link
+              <Link
                 to={user ? (isVerified ? '/challenge' : '#') : '/login?redirect=/challenge'}
                 onClick={handleChallengeClick}
                 className="block group"
@@ -281,8 +279,8 @@ export default function Home() {
                     </div>
                   </div>
                 </Card>
-              </Link> */}
-<div className="block cursor-not-allowed">
+              </Link>
+{/* <div className="block cursor-not-allowed">
   <Card className="h-full border-l-4 border-l-purple-400 transition-all duration-300">
     <div className="flex items-start gap-3">
       <div className="p-2 rounded-xl bg-purple-400/10">
@@ -301,7 +299,7 @@ export default function Home() {
       </div>
     </div>
   </Card>
-</div>
+</div> */}
             </motion.div>
 
             {/* User Search Section */}
@@ -431,7 +429,7 @@ export default function Home() {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2">
                       <Medal className="w-5 h-5 text-accent" />
-                      <h3 className="font-heading font-semibold">Recent Achievements</h3>
+                      <h3 className="font-heading font-semibold">New Achievements</h3>
                     </div>
                     <Link to="/achievements" className="text-xs text-primary hover:underline">
                       View all →
@@ -441,7 +439,7 @@ export default function Home() {
                     <RecentAchievementsSkeleton />
                   ) : recentAchievements.length === 0 ? (
                     <p className="text-muted text-sm text-center py-4">
-                      Play competitive games to earn achievements!
+                      Nothing new — play a game to unlock more.
                     </p>
                   ) : (
                     <div className="space-y-2">
