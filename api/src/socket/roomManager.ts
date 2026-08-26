@@ -18,6 +18,7 @@ const MAX_CHAT_HISTORY = 50;
 
 export const GRACE_PERIOD_MS = 30_000;
 export const DISCONNECT_WARNING_MS = 20_000;
+/** Only used to hold the final round's scores on screen before the game-over view. */
 export const RESULTS_DURATION_MS = 6_000;
 export const COUNTDOWN_SECONDS = 3;
 
@@ -468,8 +469,16 @@ class RoomManager {
     }
 
     room.phase = 'results';
-    room.phaseEndsAt = Date.now() + RESULTS_DURATION_MS;
+    // No deadline: results stay on screen until every connected player readies
+    // up for the next round, so there is nothing to count down to.
+    room.phaseEndsAt = undefined;
     room.currentColor = undefined;
+
+    // Back to 'waiting' so the results screen's ready indicator starts clean —
+    // nobody carries a 'ready' flag out of the round they just played.
+    for (const player of room.players.values()) {
+      if (player.status !== 'disconnected') player.status = 'waiting';
+    }
 
     return room;
   }

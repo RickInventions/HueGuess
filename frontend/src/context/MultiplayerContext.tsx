@@ -219,6 +219,13 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       setTotalSubmitters(snap.totalPlayers ?? snap.players.length);
       setPlayAgainVotes(snap.playAgainVotes ?? 0);
       setPlayAgainNeeded(snap.playAgainNeeded ?? 0);
+      // Reconnecting into the last round's results: derive it, otherwise the
+      // screen would offer a "ready for next round" button with no next round.
+      setIsFinalRound(
+        snap.phase === 'results' &&
+          snap.totalRounds !== null &&
+          snap.currentRound >= snap.totalRounds
+      );
       setCountdown(null);
       setSessionEnded(false);
       setError(null);
@@ -423,7 +430,6 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       leaderboard: LeaderboardEntry[];
       players: Player[];
       isFinalRound?: boolean;
-      nextRoundAt: number | null;
     }) => {
       setRoundResults(data.results);
       setLeaderboard(data.leaderboard);
@@ -432,7 +438,8 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       setCurrentRound(data.round);
       setCurrentColor(null);
       setTargetColor(data.targetColor ?? null);
-      setPhaseEndsAt(data.nextRoundAt ?? null);
+      // Results have no deadline — they hold until everyone readies up.
+      setPhaseEndsAt(null);
       setSubmittedCount(0);
       setHasSubmitted(false);
       setIsFinalRound(!!data.isFinalRound);

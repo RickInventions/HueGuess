@@ -50,9 +50,25 @@ class SoundService {
     this.initialized = true;
   }
   
-  // Countdown beep (3, 2, 1)
-  playCountdownBeep() {
-    this.playTone(880, 0.15, 'sine');
+  /**
+   * Countdown tick that rises as it approaches zero, so 3-2-1 reads as a
+   * build-up rather than three identical beeps.
+   */
+  playCountdownTick(secondsLeft: number) {
+    const pitches: Record<number, number> = { 3: 587.33, 2: 698.46, 1: 880 }; // D5, F5, A5
+    this.playTone(pitches[secondsLeft] ?? 880, secondsLeft === 1 ? 0.22 : 0.14, 'triangle');
+  }
+
+  /** Ready toggled on — short rising pair. */
+  playReady() {
+    this.playTone(659.25, 0.09, 'sine'); // E5
+    setTimeout(() => this.playTone(987.77, 0.14, 'sine'), 70); // B5
+  }
+
+  /** Ready toggled off — the same pair, falling. */
+  playUnready() {
+    this.playTone(587.33, 0.09, 'sine'); // D5
+    setTimeout(() => this.playTone(392, 0.16, 'sine'), 70); // G4
   }
   
   // Round start chime

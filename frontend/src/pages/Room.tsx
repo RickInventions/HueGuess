@@ -37,6 +37,7 @@ export default function Room() {
     playAgainVotes,
     playAgainNeeded,
     timeRemaining,
+    isFinalRound,
     sessionEnded,
     isConnected,
     isOnline,
@@ -105,7 +106,7 @@ export default function Room() {
   }, [timeRemaining === null ? null : Math.ceil(timeRemaining), phase])
 
   useEffect(() => {
-    if (countdown !== null && countdown > 0 && countdown <= 3) soundService.playCountdownBeep()
+    if (countdown !== null && countdown > 0 && countdown <= 3) soundService.playCountdownTick(countdown)
   }, [countdown])
 
   useEffect(() => {
@@ -170,6 +171,14 @@ export default function Room() {
     leaveRoom()
     navigate('/challenge', { replace: true })
   }
+
+  // Shared by the lobby and the results screen so both toggles sound the same.
+  const handleToggleReady = useCallback(() => {
+    const next = !isReady
+    setReady(next)
+    if (next) soundService.playReady()
+    else soundService.playUnready()
+  }, [isReady, setReady])
 
   const banner = (
     <ConnectionBanner
@@ -282,7 +291,7 @@ export default function Room() {
                   <Button
                     fullWidth
                     variant={isReady ? 'secondary' : 'primary'}
-                    onClick={() => setReady(!isReady)}
+                    onClick={handleToggleReady}
                     disabled={!canAct}
                     icon={isReady ? <Check className="w-4 h-4" /> : undefined}
                   >
@@ -347,6 +356,10 @@ export default function Room() {
 
   // ── RESULTS ───────────────────────────────────────────────────────────────
   if (phase === 'results') {
+    const readyCount = connectedPlayers.filter(p => p.status === 'ready').length
+    const enoughPlayers = connectedPlayers.length >= 2
+    const waitingOn = connectedPlayers.length - readyCount
+
     return (
       <div className="max-w-game lg:max-w-4xl mx-auto px-4 py-6 space-y-6">
         {banner}
@@ -361,30 +374,72 @@ export default function Room() {
             />
             <RoomLeaderboard entries={leaderboard} rounds={currentRound} currentUserId={user?.id} />
 
-            <div className="space-y-3">
-              {timeRemaining !== null && timeRemaining > 0 && (
-                <p className="text-center text-xs text-muted">
-                  Next round in {Math.ceil(timeRemaining)}s — ready up now to skip the wait
+            {isFinalRound ? (
+              <div className="space-y-3">
+                <p className="flex items-center justify-center gap-2 text-center text-sm text-muted">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Final round — tallying up the results…
                 </p>
-              )}
-              <Button
-                fullWidth
-                variant={isReady ? 'secondary' : 'primary'}
-                onClick={() => setReady(!isReady)}
-                disabled={!canAct}
-                icon={isReady ? <Check className="w-4 h-4" /> : undefined}
-              >
-                {isReady ? 'Ready ✓' : 'Ready for Next Round'}
-              </Button>
-              {isHost && (
-                <Button variant="ghost" fullWidth onClick={endRoom} disabled={!canAct}>
-                  End Session
+                <Button variant="ghost" fullWidth onClick={handleLeaveRoom}>
+                  Leave Room
                 </Button>
-              )}
-              <Button variant="ghost" fullWidth onClick={handleLeaveRoom}>
-                Leave Room
-              </Button>
-            </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Who still has to ready up before the next round can start. */}
+                <div className="space-y-3 p-4 rounded-card bg-surface-alt border border-border">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-heading font-semibold text-sm flex items-center gap-2">
+                      <Users className="w-4 h-4" />
+                      Next round
+                    </h3>
+                    <span
+                      className={`text-xs font-mono ${
+                        enoughPlayers && waitingOn === 0 ? 'text-success' : 'text-muted'
+                      }`}
+                    >
+                      {readyCount}/{connectedPlayers.length} ready
+                    </span>
+                  </div>
+
+                  <PlayerList
+                    players={players}
+                    hostSocketId={currentRoom.hostSocketId}
+                    maxPlayers={currentRoom.config.maxPlayers}
+                    currentUserId={user?.id}
+                    showScores
+                  />
+
+                  <p className="text-center text-xs text-muted">
+                    {!enoughPlayers
+                      ? 'Need at least 2 connected players to continue'
+                      : waitingOn > 0
+                        ? `Waiting on ${waitingOn} ${waitingOn === 1 ? 'player' : 'players'} to ready up`
+                        : 'Everyone is ready — starting…'}
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <Button
+                    fullWidth
+                    variant={isReady ? 'secondary' : 'primary'}
+                    onClick={handleToggleReady}
+                    disabled={!canAct}
+                    icon={isReady ? <Check className="w-4 h-4" /> : undefined}
+                  >
+                    {isReady ? 'Unready' : 'Ready for Next Round'}
+                  </Button>
+                  {isHost && (
+                    <Button variant="ghost" fullWidth onClick={endRoom} disabled={!canAct}>
+                      End Session
+                    </Button>
+                  )}
+                  <Button variant="ghost" fullWidth onClick={handleLeaveRoom}>
+                    Leave Room
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
           {chatPanel}

@@ -265,7 +265,6 @@ function endRound(io: Server, roomCode: string): void {
     leaderboard,
     players: players(room),
     isFinalRound: !!endReason,
-    nextRoundAt: endReason ? null : Date.now() + RESULTS_DURATION_MS,
     serverTime: Date.now(),
   });
 
@@ -281,24 +280,33 @@ function endRound(io: Server, roomCode: string): void {
     return;
   }
 
-  getTimers(roomCode).postRound = setTimeout(() => {
-    clearTimer(roomCode, 'postRound');
-    const next = roomManager.advanceToNextRound(roomCode);
-    if (!next) return;
+  // Nothing is scheduled here on purpose: the next round begins only once every
+  // connected player has readied up on the results screen.
+}
 
-    io.to(roomCode).emit('round_interval', {
-      message: `Round ${next.currentRound} — ready up!`,
-      nextRound: next.currentRound,
-      totalRounds: next.totalRounds,
-      players: players(next),
-      phase: next.phase,
-    });
+/**
+ * Leave the results screen for the next round, but only once everyone still in
+ * the room is ready. Safe to call on any room-state change — it no-ops unless
+ * the room is sitting in results with a full set of ready players.
+ */
+function advanceIfAllReady(io: Server, roomCode: string): void {
+  const room = roomManager.getRoom(roomCode);
+  if (!room || room.phase !== 'results') return;
+  if (!roomManager.areAllPlayersReady(room)) return;
 
-    // Anyone who readied while results were on screen keeps that flag.
-    if (roomManager.areAllPlayersReady(next)) {
-      startCountdown(io, roomCode, 'next');
-    }
-  }, RESULTS_DURATION_MS);
+  const next = roomManager.advanceToNextRound(roomCode);
+  if (!next) return;
+
+  io.to(roomCode).emit('round_interval', {
+    message: `Round ${next.currentRound} starting…`,
+    nextRound: next.currentRound,
+    totalRounds: next.totalRounds,
+    players: players(next),
+    phase: next.phase,
+  });
+
+  // advanceToNextRound keeps the ready flags, so the countdown starts immediately.
+  startCountdown(io, roomCode, 'next');
 }
 
 const END_MESSAGES: Record<GameEndReason, string> = {
@@ -347,8 +355,13 @@ function reactToRoomChange(io: Server, roomCode: string): void {
     return;
   }
 
-  if (room.phase === 'results' && connected < 2) {
-    finishGame(io, roomCode, 'not_enough_players');
+  if (room.phase === 'results') {
+    if (connected < 2) {
+      finishGame(io, roomCode, 'not_enough_players');
+      return;
+    }
+    // Whoever just left may have been the last player anyone was waiting on.
+    advanceIfAllReady(io, roomCode);
     return;
   }
 
@@ -657,10 +670,12 @@ export function setupSocketHandlers(io: Server, socket: Socket) {
       players: players(room),
     });
 
-    // During 'results' the flag is stored and honoured when the interval elapses,
-    // which keeps round numbering deterministic.
+    // During 'results' a full set of ready players is what starts the next
+    // round — there is no timer racing it.
     if (room.phase === 'waiting' && roomManager.areAllPlayersReady(room)) {
       startCountdown(io, room.code, room.currentRound === 0 ? 'new' : 'next');
+    } else if (room.phase === 'results') {
+      advanceIfAllReady(io, room.code);
     }
   });
 

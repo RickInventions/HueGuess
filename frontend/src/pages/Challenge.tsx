@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, Copy, Check, LogOut, AlertTriangle, MessageCircle, Share2, Users } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useMultiplayer } from '../hooks/useMultiplayer'
+import { soundService } from '../services/soundService'
 import { RoomSetup } from '../components/multiplayer/RoomSetup'
 import { JoinForm } from '../components/multiplayer/JoinForm'
 import { PlayerList } from '../components/multiplayer/PlayerList'
@@ -78,6 +79,11 @@ export default function Challenge() {
     chatEndRef.current?.scrollIntoView({ block: 'nearest' })
   }, [chatMessages.length])
 
+  // The 3-2-1 before the first round happens here, in the lobby.
+  useEffect(() => {
+    if (countdown !== null && countdown > 0 && countdown <= 3) soundService.playCountdownTick(countdown)
+  }, [countdown])
+
   const connectedPlayers = useMemo(() => players.filter(p => p.status !== 'disconnected'), [players])
   const currentPlayer = players.find(p => p.userId === user?.id)
   const isReady = currentPlayer?.status === 'ready'
@@ -101,6 +107,13 @@ export default function Challenge() {
   const handleJoin = (code: string) => {
     setError(null)
     joinRoom(code).catch(err => setError(err.message))
+  }
+
+  const handleToggleReady = () => {
+    const next = !isReady
+    setReady(next)
+    if (next) soundService.playReady()
+    else soundService.playUnready()
   }
 
   const handleCopyCode = async () => {
@@ -325,7 +338,7 @@ export default function Challenge() {
                     <Button
                       fullWidth
                       variant={isReady ? 'secondary' : 'primary'}
-                      onClick={() => setReady(!isReady)}
+                      onClick={handleToggleReady}
                       disabled={!canAct}
                       icon={isReady ? <Check className="w-4 h-4" /> : undefined}
                     >
