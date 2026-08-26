@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Send, Trophy, MessageCircle, LogOut, Check, Users, Loader2 } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useMultiplayer } from '../hooks/useMultiplayer'
+import { useSocket } from '../context/SocketContext'
 import { useAuth } from '../context/AuthContext'
 import { soundService } from '../services/soundService'
 import { ColorSliders } from '../components/game/ColorSliders'
@@ -15,10 +16,14 @@ import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import type { HSLColor } from '../types'
 
+/** Floor for the auto-submit fallback — no real round is shorter than this. */
+const MIN_ROUND_MS = 3_000
+
 export default function Room() {
   const navigate = useNavigate()
   const { code } = useParams<{ code: string }>()
   const { user } = useAuth()
+  const { getServerTime } = useSocket()
   const {
     currentRoom,
     players,
@@ -37,6 +42,7 @@ export default function Room() {
     playAgainVotes,
     playAgainNeeded,
     timeRemaining,
+    phaseEndsAt,
     isFinalRound,
     sessionEnded,
     isConnected,
@@ -57,6 +63,7 @@ export default function Room() {
   const [chatInput, setChatInput] = useState('')
   const chatEndRef = useRef<HTMLDivElement | null>(null)
   const autoSubmittedRef = useRef<number | null>(null)
+  const enteredReconstructionRef = useRef<number | null>(null)
   const deepLinkTried = useRef(false)
 
   const canAct = isConnected && isOnline
@@ -128,14 +135,51 @@ export default function Room() {
     soundService.playSubmitDing()
   }, [hasSubmitted, phase, submitColor, userColor])
 
-  // Auto-submit whatever is on the sliders when the clock runs out, once per round.
+  // Latest slider position, read at auto-submit time. A ref rather than a dep so
+  // dragging the sliders doesn't tear down and re-arm the timer below.
+  const userColorRef = useRef(userColor)
+  userColorRef.current = userColor
+
+  // When this client actually reached the reconstruction phase. Declared above
+  // the auto-submit effect so the stamp is already in place when it runs.
+  useEffect(() => {
+    enteredReconstructionRef.current = phase === 'reconstruction' ? Date.now() : null
+  }, [phase, currentRound])
+
+  // Auto-submit whatever is on the sliders when the round's clock runs out, once
+  // per round. Scheduled against the server deadline rather than triggered by a
+  // `timeRemaining` that read 0 — that value belongs to whichever phase was
+  // active when it was computed, and acting on it fired the instant a round
+  // opened on slower connections.
   useEffect(() => {
     if (phase !== 'reconstruction' || hasSubmitted) return
-    if (timeRemaining === null || timeRemaining > 0) return
+    if (phaseEndsAt === null) return
     if (autoSubmittedRef.current === currentRound) return
-    autoSubmittedRef.current = currentRound
-    submitColor(userColor)
-  }, [timeRemaining, phase, hasSubmitted, currentRound, submitColor, userColor])
+
+    const enteredAt = enteredReconstructionRef.current ?? Date.now()
+    const untilDeadline = phaseEndsAt - getServerTime()
+    // A deadline already in the past while we're only just arriving means the
+    // clock estimate is off, not that the round is over — fall back to the
+    // configured round length so a bad estimate can't eat the player's turn.
+    const roundMs = Math.max((currentRoom?.config.roundTimeSeconds ?? 0) * 1000, MIN_ROUND_MS)
+    const delay =
+      untilDeadline > 0 ? untilDeadline : Math.max(0, enteredAt + roundMs - Date.now())
+
+    const timer = window.setTimeout(() => {
+      if (autoSubmittedRef.current === currentRound) return
+      autoSubmittedRef.current = currentRound
+      submitColor(userColorRef.current)
+    }, delay)
+    return () => window.clearTimeout(timer)
+  }, [
+    phase,
+    phaseEndsAt,
+    hasSubmitted,
+    currentRound,
+    getServerTime,
+    submitColor,
+    currentRoom?.config.roundTimeSeconds,
+  ])
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {

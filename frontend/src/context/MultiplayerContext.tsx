@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { useSocket } from './SocketContext';
 import { useAuth } from './AuthContext';
@@ -118,7 +118,6 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
   const [currentColor, setCurrentColor] = useState<HSLColor | null>(null);
   const [targetColor, setTargetColor] = useState<HSLColor | null>(null);
   const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
-  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [totalSubmitters, setTotalSubmitters] = useState(0);
   const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -149,7 +148,6 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     setCurrentColor(null);
     setTargetColor(null);
     setPhaseEndsAt(null);
-    setTimeRemaining(null);
     setSubmittedCount(0);
     setTotalSubmitters(0);
     setHasSubmitted(false);
@@ -164,28 +162,30 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
   // ── Phase timer ───────────────────────────────────────────────────────────
   // Driven by the server's deadline rather than a local decrementing counter, so
   // it stays correct through tab throttling, sleep, and reconnects.
+  //
+  // Derived during render instead of mirrored into state on an interval. A state
+  // mirror lags one commit behind every `phaseEndsAt` change, so for one render
+  // after a phase flip it still held the *previous* phase's value — and a
+  // consumer reading that stale 0 as "this phase has expired" would act on it.
+  // On a fast connection the new deadline landed inside the same 200ms tick and
+  // the stale value was never 0; on a slow (mobile) one it reliably was.
+  const [clockTick, setClockTick] = useState(0);
+
   useEffect(() => {
-    if (phaseEndsAt === null) {
-      setTimeRemaining(null);
-      return;
-    }
-
-    let frame: number | undefined;
-    const tick = () => {
-      const remaining = Math.max(0, (phaseEndsAt - getServerTime()) / 1000);
-      setTimeRemaining(remaining);
-      if (remaining <= 0 && frame !== undefined) {
-        clearInterval(frame);
-        frame = undefined;
-      }
-    };
-
-    tick();
-    frame = window.setInterval(tick, 200);
-    return () => {
-      if (frame !== undefined) clearInterval(frame);
-    };
+    if (phaseEndsAt === null) return;
+    // Stop ticking once the deadline is behind us — nothing left to count down.
+    const id = window.setInterval(() => {
+      setClockTick(t => t + 1);
+      if (phaseEndsAt - getServerTime() <= 0) window.clearInterval(id);
+    }, 200);
+    return () => window.clearInterval(id);
   }, [phaseEndsAt, getServerTime]);
+
+  const timeRemaining = useMemo(
+    () => (phaseEndsAt === null ? null : Math.max(0, (phaseEndsAt - getServerTime()) / 1000)),
+    // clockTick is the 200ms heartbeat that re-evaluates this.
+    [phaseEndsAt, getServerTime, clockTick]
+  );
 
   // ── Server events ─────────────────────────────────────────────────────────
   useEffect(() => {
