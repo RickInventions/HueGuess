@@ -15,6 +15,7 @@ import { FriendsLauncher } from '../components/multiplayer/FriendsModal'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import type { RoomConfig } from '../types/multiplayer'
+import { RoomSettings } from '../components/multiplayer/RoomSettings'
 
 type View = 'choose' | 'create' | 'join' | 'waiting'
 
@@ -42,6 +43,7 @@ export default function Challenge() {
     isReconnecting,
     connectionMessage,
     retryConnection,
+    updateRoomConfig,
     error: mpError,
   } = useMultiplayer()
 
@@ -279,12 +281,13 @@ export default function Challenge() {
             <p className="text-xs text-muted">Share this code with friends to join</p>
           </Card>
 
-          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-xs text-muted">
-            <span>🕐 {currentRoom.config.roundTimeSeconds}s rounds</span>
-            <span>👁 {currentRoom.config.colorTimeSeconds}s visibility</span>
-            <span>🎮 {currentRoom.config.difficulty}</span>
-            <span>🔁 {currentRoom.config.specificRounds ?? '∞'} rounds</span>
-          </div>
+            <RoomSettings
+              config={currentRoom.config}
+              canEdit={currentPlayer?.isHost && currentRoom.phase === 'waiting'}
+              playerCount={players.length}
+              onSave={updateRoomConfig}
+              disabled={!canAct}
+            />
 
           <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
             <div className="space-y-6">
