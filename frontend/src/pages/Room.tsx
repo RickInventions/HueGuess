@@ -14,6 +14,7 @@ import { PlayerList } from '../components/multiplayer/PlayerList'
 import { ChatPanel } from '../components/multiplayer/ChatPanel'
 import { ConnectionBanner } from '../components/multiplayer/ConnectionBanner'
 import { RoomTopBar } from '../components/multiplayer/RoomTopBar'
+import { RoomSettings } from '../components/multiplayer/RoomSettings'
 import { Button } from '../components/ui/Button'
 import type { HSLColor } from '../types'
 
@@ -60,6 +61,7 @@ export default function Room() {
     typingUsers,
     setReady,
     joinRoom,
+    updateRoomConfig,
   } = useMultiplayer()
 
   const [userColor, setUserColor] = useState<HSLColor>({ h: 0, s: 0, l: 0 })
@@ -300,6 +302,17 @@ export default function Room() {
               currentUserId={user?.id}
               showScores={currentRound > 0}
               allowFriendRequests
+            />
+
+            {/* Editable only before round 1 — the server enforces the same window,
+                and mid-game these values are the rules already-scored rounds were
+                played under. */}
+            <RoomSettings
+              config={currentRoom.config}
+              canEdit={isHost && currentRound === 0}
+              playerCount={players.length}
+              onSave={updateRoomConfig}
+              disabled={!canAct}
             />
 
             {showCountdown ? (

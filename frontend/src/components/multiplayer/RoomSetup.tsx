@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { Clock, Eye, Play, Hash, Users } from 'lucide-react'
+import { Clock, Eye, Play, Hash, Users, Save } from 'lucide-react'
 import { Button } from '../ui/Button'
 import type { RoomConfig } from '../../types/multiplayer'
 import type { Difficulty } from '../../types'
@@ -10,6 +10,21 @@ interface RoomSetupProps {
   onCreate: (config: RoomConfig) => void
   loading?: boolean
   disabled?: boolean
+  /**
+   * Seed the controls with an existing room's settings — this is what turns the
+   * form into an editor for the host. Read once on mount, which is safe because
+   * the modal that hosts it unmounts on close.
+   */
+  initialConfig?: RoomConfig
+  /**
+   * Players already in the room. Capacity can't be set below this, so the
+   * choices underneath it are disabled rather than rejected by the server.
+   */
+  minPlayers?: number
+  title?: string | null
+  submitLabel?: string
+  /** Adds a Cancel button beside submit. */
+  onCancel?: () => void
 }
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'extreme']
@@ -17,13 +32,24 @@ const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'extreme']
 /** Room capacity choices. Must stay inside the server's MIN/MAX_PLAYERS bounds. */
 const PLAYER_COUNTS = [2, 3, 4, 5, 6, 7, 8]
 
-export function RoomSetup({ onCreate, loading, disabled }: RoomSetupProps) {
-  const [roundTimeSeconds, setRoundTimeSeconds] = useState(20)
-  const [colorTimeSeconds, setColorTimeSeconds] = useState(3)
-  const [difficulty, setDifficulty] = useState<Difficulty>('medium')
-  const [maxPlayers, setMaxPlayers] = useState(4)
-  const [roundsEnabled, setRoundsEnabled] = useState(false)
-  const [roundsValue, setRoundsValue] = useState(5)
+export function RoomSetup({
+  onCreate,
+  loading,
+  disabled,
+  initialConfig,
+  minPlayers = 2,
+  title = 'Create Room',
+  submitLabel = 'Create Room',
+  onCancel,
+}: RoomSetupProps) {
+  const [roundTimeSeconds, setRoundTimeSeconds] = useState(initialConfig?.roundTimeSeconds ?? 20)
+  const [colorTimeSeconds, setColorTimeSeconds] = useState(initialConfig?.colorTimeSeconds ?? 3)
+  const [difficulty, setDifficulty] = useState<Difficulty>(initialConfig?.difficulty ?? 'medium')
+  const [maxPlayers, setMaxPlayers] = useState(
+    Math.max(initialConfig?.maxPlayers ?? 4, minPlayers)
+  )
+  const [roundsEnabled, setRoundsEnabled] = useState(initialConfig?.specificRounds != null)
+  const [roundsValue, setRoundsValue] = useState(initialConfig?.specificRounds ?? 5)
 
   const handleSubmit = () => {
     onCreate({
@@ -41,7 +67,8 @@ export function RoomSetup({ onCreate, loading, disabled }: RoomSetupProps) {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-5"
     >
-      <h3 className="font-heading text-xl font-semibold text-center">Create Room</h3>
+      {/* null when the surrounding dialog already supplies a heading. */}
+      {title && <h3 className="font-heading text-xl font-semibold text-center">{title}</h3>}
 
       {/* Difficulty */}
       <div className="space-y-2">
@@ -76,22 +103,29 @@ export function RoomSetup({ onCreate, loading, disabled }: RoomSetupProps) {
           <span className="ml-auto text-sm font-mono font-medium text-deep">{maxPlayers}</span>
         </div>
         <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-          {PLAYER_COUNTS.map((count) => (
-            <button
-              key={count}
-              type="button"
-              aria-pressed={maxPlayers === count}
-              aria-label={`${count} players`}
-              onClick={() => setMaxPlayers(count)}
-              className={`px-2 py-2 text-xs font-mono rounded-button transition-all ${
-                maxPlayers === count
-                  ? 'bg-primary text-white shadow-glow-primary'
-                  : 'bg-surface-alt text-muted hover:text-deep'
-              }`}
-            >
-              {count}
-            </button>
-          ))}
+          {PLAYER_COUNTS.map((count) => {
+            const tooFew = count < minPlayers
+            return (
+              <button
+                key={count}
+                type="button"
+                aria-pressed={maxPlayers === count}
+                aria-label={`${count} players`}
+                title={tooFew ? `${minPlayers} players are already in the room` : undefined}
+                disabled={tooFew}
+                onClick={() => setMaxPlayers(count)}
+                className={`px-2 py-2 text-xs font-mono rounded-button transition-all ${
+                  maxPlayers === count
+                    ? 'bg-primary text-white shadow-glow-primary'
+                    : tooFew
+                      ? 'bg-surface-alt text-muted cursor-not-allowed line-through'
+                      : 'bg-surface-alt text-muted hover:text-deep'
+                }`}
+              >
+                {count}
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -198,15 +232,22 @@ export function RoomSetup({ onCreate, loading, disabled }: RoomSetupProps) {
         )}
       </div>
 
-      <Button
-        fullWidth
-        onClick={handleSubmit}
-        loading={loading}
-        disabled={disabled}
-        icon={<Play className="w-4 h-4" />}
-      >
-        Create Room
-      </Button>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row">
+        {onCancel && (
+          <Button variant="ghost" fullWidth onClick={onCancel} disabled={loading}>
+            Cancel
+          </Button>
+        )}
+        <Button
+          fullWidth
+          onClick={handleSubmit}
+          loading={loading}
+          disabled={disabled}
+          icon={initialConfig ? <Save className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+        >
+          {submitLabel}
+        </Button>
+      </div>
     </motion.div>
   )
 }

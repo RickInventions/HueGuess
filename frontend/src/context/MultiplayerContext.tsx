@@ -98,6 +98,8 @@ interface MultiplayerContextType {
 
   createRoom: (config: RoomConfig) => Promise<string>;
   joinRoom: (code: string) => Promise<void>;
+  /** Host only, lobby only — rewrites the room's settings in place. */
+  updateRoomConfig: (config: RoomConfig) => void;
   leaveRoom: () => void;
   setReady: (isReady: boolean) => void;
   submitColor: (color: HSLColor) => void;
@@ -341,6 +343,36 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     const onRoomState = (snap: RoomSnapshot) => {
       if (!snap?.code) return;
       applySnapshot(snap);
+    };
+
+    /**
+     * The host edited the settings from the lobby. `players` comes along because
+     * a change during the start countdown clears everyone's ready flag — the
+     * game restarts only once people have seen what actually changed.
+     */
+    const onRoomConfigUpdated = (data: {
+      config: RoomConfig;
+      totalRounds: number | null;
+      players: Player[];
+      changedBy?: string;
+      changedBySocketId?: string;
+    }) => {
+      if (data.players) setPlayers(data.players);
+      setTotalRounds(data.totalRounds ?? data.config.specificRounds);
+      setCurrentRoom(prev =>
+        prev
+          ? {
+              ...prev,
+              config: data.config,
+              players: data.players ?? prev.players,
+              totalRounds: data.totalRounds ?? data.config.specificRounds,
+            }
+          : prev
+      );
+      // The host already saw the form close; only tell the others.
+      if (data.changedBySocketId !== socket.id) {
+        toast.info(`${data.changedBy ?? 'The host'} updated the room settings`);
+      }
     };
 
     const onRoomUnavailable = () => {
@@ -673,6 +705,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     socket.on('room_created', onRoomCreated);
     socket.on('room_joined', onRoomJoined);
     socket.on('room_state', onRoomState);
+    socket.on('room_config_updated', onRoomConfigUpdated);
     socket.on('room_unavailable', onRoomUnavailable);
     socket.on('rejoin_failed', onRejoinFailed);
     socket.on('left_room', onLeftRoom);
@@ -707,6 +740,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       socket.off('room_created', onRoomCreated);
       socket.off('room_joined', onRoomJoined);
       socket.off('room_state', onRoomState);
+      socket.off('room_config_updated', onRoomConfigUpdated);
       socket.off('room_unavailable', onRoomUnavailable);
       socket.off('rejoin_failed', onRejoinFailed);
       socket.off('left_room', onLeftRoom);
@@ -866,6 +900,22 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     resetRoom();
   }, [socket, resetRoom]);
 
+  /**
+   * Fire-and-forget: the server broadcasts `room_config_updated` on success and a
+   * plain `error` on rejection, and that error already toasts globally — so the
+   * caller doesn't have to wait on an ack to close its form.
+   */
+  const updateRoomConfig = useCallback(
+    (config: RoomConfig) => {
+      if (!socket?.connected) {
+        toast.error('Not connected — the settings were not saved');
+        return;
+      }
+      socket.emit('update_room_config', { config });
+    },
+    [socket]
+  );
+
   const setReady = useCallback(
     (isReady: boolean) => {
       if (!socket?.connected) {
@@ -977,6 +1027,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
         sessionEnded,
         createRoom,
         joinRoom,
+        updateRoomConfig,
         leaveRoom,
         setReady,
         submitColor,

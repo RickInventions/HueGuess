@@ -791,6 +791,57 @@ export function setupSocketHandlers(io: Server, socket: Socket) {
     }
   });
 
+  // ── Host edits the room settings from the lobby ────────────────────────────
+  on<{ config?: Partial<RoomConfig> }>('update_room_config', data => {
+    const room = roomManager.getRoomBySocketId(socket.id);
+    if (!room) {
+      emitError(socket, 'You are not in a room', 'NOT_IN_ROOM');
+      return;
+    }
+    if (!room.players.get(socket.id)?.isHost) {
+      emitError(socket, 'Only the host can change the room settings', 'NOT_HOST');
+      return;
+    }
+    if (!allow(socket, 'config', 15, 10_000)) {
+      emitError(socket, 'Slow down before changing the settings again', 'RATE_LIMITED');
+      return;
+    }
+
+    let config: RoomConfig;
+    try {
+      config = parseConfig(data?.config);
+    } catch (error) {
+      emitError(socket, (error as Error).message, 'INVALID_CONFIG');
+      return;
+    }
+
+    let updated: Room;
+    try {
+      updated = roomManager.updateConfig(room.code, config);
+    } catch (error) {
+      emitError(socket, (error as Error).message, 'CONFIG_LOCKED');
+      return;
+    }
+
+    const changedBy = updated.players.get(socket.id)?.username;
+
+    // A running countdown means everyone had readied up for the *old* settings.
+    // Cancel it and clear readiness rather than letting the host swap the
+    // difficulty out from under a start that is already a second in.
+    if (roomTimers.get(updated.code)?.countdown) {
+      cancelCountdown(io, updated.code, `${changedBy ?? 'The host'} changed the room settings`);
+      roomManager.clearReadyStates(updated);
+    }
+
+    io.to(updated.code).emit('room_config_updated', {
+      config: updated.config,
+      totalRounds: updated.totalRounds,
+      players: players(updated),
+      changedBy,
+      changedBySocketId: socket.id,
+    });
+  });
+
   // ── Host ends the session ─────────────────────────────────────────────────
   on<void>('end_room', () => {
     const room = roomManager.getRoomBySocketId(socket.id);

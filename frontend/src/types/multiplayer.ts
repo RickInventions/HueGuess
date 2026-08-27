@@ -119,6 +119,11 @@ export interface JoinRoomPayload {
   username?: string;
 }
 
+/** Host-only, lobby-only: replaces the room's settings wholesale. */
+export interface UpdateRoomConfigPayload {
+  config: RoomConfig;
+}
+
 export interface SubmitColorPayload {
   color: HSLColor;
 }

@@ -312,7 +312,41 @@ class RoomManager {
     this.rooms.delete(code);
   }
 
+  /**
+   * Rewrite a room's settings from the lobby, so a host who set something wrong
+   * can fix it in place instead of closing the room and making everyone rejoin.
+   *
+   * Throws with a human-readable reason (like joinRoom) — the caller relays the
+   * message straight back to the host.
+   */
+  updateConfig(roomCode: string, config: RoomConfig): Room {
+    const room = this.getRoom(roomCode);
+    if (!room) throw new Error('Room not found');
+
+    // Only before the first round: mid-game these values are the rules that
+    // already-scored rounds were played under, and totalRounds would move the
+    // finish line underneath them.
+    if (room.phase !== 'waiting' || room.currentRound !== 0) {
+      throw new Error('Settings can only be changed in the lobby, before the game starts');
+    }
+    // A settings change must never be the thing that removes somebody.
+    if (config.maxPlayers < room.players.size) {
+      throw new Error(`Max players can't be below the ${room.players.size} already in the room`);
+    }
+
+    room.config = config;
+    room.totalRounds = config.specificRounds; // derived from the config everywhere else too
+    return room;
+  }
+
   // ── Ready state ───────────────────────────────────────────────────────────
+
+  /** Drop everyone back to "not ready" — used when what they readied up for changes. */
+  clearReadyStates(room: Room): void {
+    for (const player of room.players.values()) {
+      if (player.status === 'ready') player.status = 'waiting';
+    }
+  }
 
   setPlayerReady(socketId: string, isReady: boolean): Room | null {
     const room = this.getRoomBySocketId(socketId);

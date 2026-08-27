@@ -8,5 +8,12 @@
     "typescript-config/strict": "off",
     "axe/forms": "off",
     "axe/name-role-value": "off"
-  }
+  },
+  "browserslist": [
+    "defaults",
+    "not ie 11",
+    "not and_ff <= 149",
+    "not firefox <= 149",
+    "not opera <= 127"
+  ]
 }
