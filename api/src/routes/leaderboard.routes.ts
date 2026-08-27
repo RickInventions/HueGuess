@@ -1,57 +1,70 @@
 import { Router } from 'express';
-import { LeaderboardService } from '../services/leaderboard.service.js';
+import {
+  LeaderboardService,
+  MIN_RANKED_GAMES,
+  type LeaderboardPeriod,
+  type LeaderboardSortBy,
+  type SortOrder,
+} from '../services/leaderboard.service.js';
 
 const router = Router();
+
+const VALID_PERIODS: LeaderboardPeriod[] = ['all-time', 'weekly', 'daily'];
+const VALID_SORT_BY: LeaderboardSortBy[] = ['points', 'gamesPlayed', 'avgAccuracy', 'streak'];
+const VALID_SORT_ORDER: SortOrder[] = ['ASC', 'DESC'];
+
+/** `parseInt('') || fallback` turns a deliberate 0 into the fallback, so parse explicitly. */
+function toInt(value: unknown, fallback: number): number {
+  const parsed = parseInt(String(value ?? ''), 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
 // Get leaderboard
 router.get('/', async (req, res) => {
   try {
-    const period = (req.query.period as any) || 'all-time';
-    const sortBy = (req.query.sortBy as any) || 'points';
-    const sortOrder = (req.query.sortOrder as any) || 'DESC';
-    const search = req.query.search as string;
-    const limit = parseInt(req.query.limit as string) || 100;
-    const offset = parseInt(req.query.offset as string) || 0;
-    
-    // Validate inputs
-    const validPeriods = ['all-time', 'weekly', 'daily'];
-    const validSortBy = ['points', 'gamesPlayed', 'avgAccuracy', 'streak'];
-    const validSortOrder = ['ASC', 'DESC'];
-    
-    if (!validPeriods.includes(period)) {
+    const period = (req.query.period as LeaderboardPeriod) || 'all-time';
+    const sortBy = (req.query.sortBy as LeaderboardSortBy) || 'points';
+    const sortOrder = ((req.query.sortOrder as string) || 'DESC').toUpperCase() as SortOrder;
+    const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+
+    if (!VALID_PERIODS.includes(period)) {
       res.status(400).json({ error: 'Invalid period' });
       return;
     }
-    
-    if (!validSortBy.includes(sortBy)) {
+
+    if (!VALID_SORT_BY.includes(sortBy)) {
       res.status(400).json({ error: 'Invalid sortBy' });
       return;
     }
-    
-    if (!validSortOrder.includes(sortOrder)) {
+
+    if (!VALID_SORT_ORDER.includes(sortOrder)) {
       res.status(400).json({ error: 'Invalid sortOrder' });
       return;
     }
-    
-    const leaderboard = await LeaderboardService.getLeaderboard({
-      period,
-      sortBy,
-      sortOrder,
-      search,
-      limit: Math.min(limit, 100), // Max 100 per page
-      offset,
-    });
-    
-    const globalStats = await LeaderboardService.getGlobalStats();
-    const awards = await LeaderboardService.getAwardEmblems();
-    const top10 = await LeaderboardService.getTop10Players();
-    
+
+    const [leaderboard, globalStats, awards, top10] = await Promise.all([
+      LeaderboardService.getLeaderboard({
+        period,
+        sortBy,
+        sortOrder,
+        search,
+        // Clamped in the service too, but bound it here so a hostile limit never
+        // reaches the query planner.
+        limit: Math.min(Math.max(toInt(req.query.limit, 100), 1), 100),
+        offset: Math.max(toInt(req.query.offset, 0), 0),
+      }),
+      LeaderboardService.getGlobalStats(),
+      LeaderboardService.getAwardEmblems(),
+      LeaderboardService.getTop10Players(),
+    ]);
+
     res.json({
       success: true,
       leaderboard,
       globalStats,
       awards,
       top10,
+      minRankedGames: MIN_RANKED_GAMES,
     });
   } catch (error) {
     console.error('Leaderboard error:', error);
@@ -60,16 +73,14 @@ router.get('/', async (req, res) => {
 });
 
 // Get awards only (for quick display)
-router.get('/awards', async (req, res) => {
+router.get('/awards', async (_req, res) => {
   try {
-    const awards = await LeaderboardService.getAwardEmblems();
-    const top10 = await LeaderboardService.getTop10Players();
-    
-    res.json({
-      success: true,
-      awards,
-      top10,
-    });
+    const [awards, top10] = await Promise.all([
+      LeaderboardService.getAwardEmblems(),
+      LeaderboardService.getTop10Players(),
+    ]);
+
+    res.json({ success: true, awards, top10, minRankedGames: MIN_RANKED_GAMES });
   } catch (error) {
     console.error('Awards error:', error);
     res.status(500).json({ error: 'Failed to fetch awards' });
@@ -77,7 +88,7 @@ router.get('/awards', async (req, res) => {
 });
 
 // Get global stats only
-router.get('/global-stats', async (req, res) => {
+router.get('/global-stats', async (_req, res) => {
   try {
     const stats = await LeaderboardService.getGlobalStats();
     res.json({ success: true, stats });

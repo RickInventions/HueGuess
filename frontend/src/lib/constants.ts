@@ -35,81 +35,20 @@ export const DIFFICULTY_CONFIGS: Record<Difficulty, DifficultyConfig> = {
   },
 };
 
-export const RANK_THRESHOLDS = {
-  bronze: 0,
-  silver: 300,
-  gold: 700,
-  platinum: 1400,
-  diamond: 2500,
-};
-
-export const RANK_ICONS = {
-  bronze: '🥉',
-  silver: '🥈',
-  gold: '🥇',
-  platinum: '💠',
-  diamond: '💎',
-};
-
-export const getRankTier = (rating: number): string => {
-  if (rating < 300) return 'Bronze';
-  if (rating < 700) return 'Silver';
-  if (rating < 1400) return 'Gold';
-  if (rating < 2500) return 'Platinum';
-  return 'Diamond';
-};
-
-export const RANK_COLORS = {
-  bronze: '#CD7F32',
-  silver: '#C0C0C0',
-  gold: '#FFD700',
-  platinum: '#E5E4E2',
-  diamond: '#B9F2FF',
-}
-
-export const getRankProgress = (rating: number) => {
-  let currentThreshold = 0;
-  let nextThreshold = 300;
-  let currentTier = 'Bronze';
-  let nextTier = 'Silver';
-  
-  if (rating < 300) {
-    currentThreshold = 0;
-    nextThreshold = 300;
-    currentTier = 'Bronze';
-    nextTier = 'Silver';
-  } else if (rating < 700) {
-    currentThreshold = 300;
-    nextThreshold = 700;
-    currentTier = 'Silver';
-    nextTier = 'Gold';
-  } else if (rating < 1400) {
-    currentThreshold = 700;
-    nextThreshold = 1400;
-    currentTier = 'Gold';
-    nextTier = 'Platinum';
-  } else if (rating < 2500) {
-    currentThreshold = 1400;
-    nextThreshold = 2500;
-    currentTier = 'Platinum';
-    nextTier = 'Diamond';
-  } else {
-    currentThreshold = 2500;
-    nextThreshold = 2500;
-    currentTier = 'Diamond';
-    nextTier = 'Max';
-  }
-  
-  const progress = nextThreshold > currentThreshold 
-    ? ((rating - currentThreshold) / (nextThreshold - currentThreshold)) * 100
-    : 100;
-  
-  return {
-    currentTier,
-    nextTier,
-    progress: Math.min(100, Math.max(0, progress)),
-    needed: nextThreshold - rating,
-    currentThreshold,
-    nextThreshold,
-  };
-};
+// The rank ladder lives in ./ranks.ts. Re-exported here so the older import
+// sites keep working — note that `getRankTier` now returns a full division
+// label ("Gold II"), so index the palettes with rankColor()/rankIcon() rather
+// than the label itself.
+export {
+  RANK_LADDER,
+  STARTING_RATING,
+  RANK_ICONS,
+  RANK_COLORS,
+  getRankDivision,
+  getRankTier,
+  getRankTierName,
+  getRankProgress,
+  rankColor,
+  rankIcon,
+} from './ranks';
+export type { RankTierBand, RankDivision } from './ranks';

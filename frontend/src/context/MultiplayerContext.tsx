@@ -2,12 +2,14 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { toast } from 'sonner';
 import { useSocket } from './SocketContext';
 import { useAuth } from './AuthContext';
+import { soundService } from '../services/soundService';
 import type {
   Room,
   Player,
   RoomConfig,
   RoundResult,
   ChatMessage,
+  TypingSignal,
   GamePhase,
   GameEndReason,
   LeaderboardEntry,
@@ -19,6 +21,20 @@ import type { HSLColor } from '../types';
 /** Survives a page reload so a refresh mid-game rejoins instead of abandoning the room. */
 const ROOM_KEY = 'hueguess:room';
 const ACTION_TIMEOUT_MS = 10_000;
+
+/**
+ * How often a `typing` signal may go out while somebody keeps typing. Well under
+ * the server's 4s TTL so the indicator never lapses mid-sentence, and well under
+ * its 12-per-5s rate limit.
+ */
+const TYPING_THROTTLE_MS = 1_500;
+
+/**
+ * How long a received `typing` signal stands locally. Mirrors the server's TTL,
+ * but measured on this clock: the payload carries a server-side `expiresAt`, and
+ * trusting it would fold any clock skew straight into the indicator's lifetime.
+ */
+const TYPING_TTL_MS = 4_000;
 
 function rememberRoom(code: string) {
   try {
@@ -53,6 +69,8 @@ interface MultiplayerContextType {
   roundResults: RoundResult[];
   leaderboard: LeaderboardEntry[];
   chatMessages: ChatMessage[];
+  /** Usernames currently composing a message, excluding you. */
+  typingUsers: string[];
   countdown: number | null;
   currentColor: HSLColor | null;
   /** The colour of the round just finished — only set while results are showing. */
@@ -86,6 +104,8 @@ interface MultiplayerContextType {
   playAgain: () => void;
   endRoom: () => void;
   sendMessage: (message: string) => void;
+  /** Tell the room you're composing. Throttled internally — call it per keystroke. */
+  sendTyping: (isTyping: boolean) => void;
   resetRoom: () => void;
   /** Ask the server for a fresh snapshot (used after a reconnect or tab refocus). */
   requestState: () => void;
@@ -114,6 +134,8 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
   const [roundResults, setRoundResults] = useState<RoundResult[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  /** socketId → who is typing and when their signal lapses (local clock). */
+  const [typingBySocket, setTypingBySocket] = useState<Record<string, { username: string; expiresAt: number }>>({});
   const [countdown, setCountdown] = useState<number | null>(null);
   const [currentColor, setCurrentColor] = useState<HSLColor | null>(null);
   const [targetColor, setTargetColor] = useState<HSLColor | null>(null);
@@ -144,6 +166,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     setRoundResults([]);
     setLeaderboard([]);
     setChatMessages([]);
+    setTypingBySocket({});
     setCountdown(null);
     setCurrentColor(null);
     setTargetColor(null);
@@ -158,6 +181,36 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     setError(null);
     setSessionEnded(false);
   }, []);
+
+  // ── Typing indicator ──────────────────────────────────────────────────────
+  // Signals expire on a timer as well as on an explicit `isTyping: false`,
+  // because the sender can close the tab or lose connection mid-sentence and
+  // that "stopped" event never arrives. The interval only exists while somebody
+  // is actually typing, so an idle room does no work.
+  const isAnyoneTyping = Object.keys(typingBySocket).length > 0;
+
+  useEffect(() => {
+    if (!isAnyoneTyping) return;
+    const timer = window.setInterval(() => {
+      const now = Date.now();
+      setTypingBySocket(prev => {
+        const next: typeof prev = {};
+        let dropped = false;
+        for (const [socketId, entry] of Object.entries(prev)) {
+          if (entry.expiresAt > now) next[socketId] = entry;
+          else dropped = true;
+        }
+        // Same object when nothing expired, so this doesn't re-arm the effect.
+        return dropped ? next : prev;
+      });
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [isAnyoneTyping]);
+
+  const typingUsers = useMemo(
+    () => Array.from(new Set(Object.values(typingBySocket).map(entry => entry.username))),
+    [typingBySocket]
+  );
 
   // ── Phase timer ───────────────────────────────────────────────────────────
   // Driven by the server's deadline rather than a local decrementing counter, so
@@ -564,6 +617,47 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
 
     const onNewMessage = (data: ChatMessage) => {
       setChatMessages(prev => [...prev.slice(-99), data]);
+
+      // Their message just landed, so they've stopped typing. The server sends
+      // the same thing, but clearing it here means the indicator never lingers
+      // for a frame under the message it was describing.
+      if (data.socketId) {
+        setTypingBySocket(prev => {
+          if (!(data.socketId! in prev)) return prev;
+          const next = { ...prev };
+          delete next[data.socketId!];
+          return next;
+        });
+      }
+
+      // Your own message shouldn't chime back at you. The service throttles, so
+      // a burst of messages is still one blip.
+      const isMine = (data.userId && user?.id && data.userId === user.id) || data.socketId === socket.id;
+      if (!isMine) soundService.playMessage();
+    };
+
+    const onUserTyping = (data: TypingSignal) => {
+      if (!data?.socketId) return;
+      // The server already excludes the sender; this also covers a second tab
+      // on the same account announcing your own typing back to you.
+      if (data.socketId === socket.id) return;
+      if (data.userId && user?.id && data.userId === user.id) return;
+
+      setTypingBySocket(prev => {
+        if (!data.isTyping) {
+          if (!(data.socketId in prev)) return prev;
+          const next = { ...prev };
+          delete next[data.socketId];
+          return next;
+        }
+        return {
+          ...prev,
+          [data.socketId]: {
+            username: data.username || 'Someone',
+            expiresAt: Date.now() + TYPING_TTL_MS,
+          },
+        };
+      });
     };
 
     const onError = (data: SocketErrorPayload) => {
@@ -606,6 +700,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     socket.on('room_reset', onRoomReset);
     socket.on('session_ended', onSessionEnded);
     socket.on('new_message', onNewMessage);
+    socket.on('user_typing', onUserTyping);
     socket.on('error', onError);
 
     return () => {
@@ -639,6 +734,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       socket.off('room_reset', onRoomReset);
       socket.off('session_ended', onSessionEnded);
       socket.off('new_message', onNewMessage);
+      socket.off('user_typing', onUserTyping);
       socket.off('error', onError);
     };
   }, [socket, resetRoom, user?.id]);
@@ -803,11 +899,37 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     socket.emit('end_room');
   }, [socket]);
 
+  /** When we last told the room we were typing — throttles the outgoing signal. */
+  const lastTypingSentAt = useRef(0);
+
   const sendMessage = useCallback(
     (message: string) => {
       const text = message.trim();
       if (!socket?.connected || !text) return;
       socket.emit('send_message', { message: text.slice(0, 200) });
+      // The server broadcasts the stop signal too, but resetting the throttle
+      // here keeps it from suppressing the next "started typing".
+      lastTypingSentAt.current = 0;
+    },
+    [socket]
+  );
+
+  const sendTyping = useCallback(
+    (isTyping: boolean) => {
+      if (!socket?.connected || !roomCodeRef.current) return;
+
+      if (!isTyping) {
+        // "Stopped" always goes out: it's the event that clears the indicator,
+        // and a throttled one would leave it hanging for the full TTL.
+        lastTypingSentAt.current = 0;
+        socket.emit('typing', { isTyping: false });
+        return;
+      }
+
+      const now = Date.now();
+      if (now - lastTypingSentAt.current < TYPING_THROTTLE_MS) return;
+      lastTypingSentAt.current = now;
+      socket.emit('typing', { isTyping: true });
     },
     [socket]
   );
@@ -832,6 +954,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
         roundResults,
         leaderboard,
         chatMessages,
+        typingUsers,
         countdown,
         currentColor,
         targetColor,
@@ -860,6 +983,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
         playAgain,
         endRoom,
         sendMessage,
+        sendTyping,
         resetRoom,
         requestState,
         retryConnection: retry,

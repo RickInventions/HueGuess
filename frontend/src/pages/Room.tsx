@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Trophy, LogOut, Check, Users, Loader2 } from 'lucide-react'
+import { Send, Trophy, Check, Users, Loader2 } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useMultiplayer } from '../hooks/useMultiplayer'
 import { useSocket } from '../context/SocketContext'
@@ -13,6 +13,7 @@ import { RoomLeaderboard } from '../components/multiplayer/RoomLeaderboard'
 import { PlayerList } from '../components/multiplayer/PlayerList'
 import { ChatPanel } from '../components/multiplayer/ChatPanel'
 import { ConnectionBanner } from '../components/multiplayer/ConnectionBanner'
+import { RoomTopBar } from '../components/multiplayer/RoomTopBar'
 import { Button } from '../components/ui/Button'
 import type { HSLColor } from '../types'
 
@@ -55,6 +56,8 @@ export default function Room() {
     endRoom,
     leaveRoom,
     sendMessage,
+    sendTyping,
+    typingUsers,
     setReady,
     joinRoom,
   } = useMultiplayer()
@@ -227,7 +230,30 @@ export default function Room() {
       onSend={sendMessage}
       canSend={canAct}
       currentUserId={user?.id}
+      typingUsers={typingUsers}
+      onTyping={sendTyping}
     />
+  )
+
+  /**
+   * Leaving lives here rather than beside Ready/Submit, and is confirmed first.
+   * The wording changes with the phase because leaving a live round costs the
+   * round, while leaving the lobby costs nothing.
+   */
+  const topBar = (subtitle: React.ReactNode, midGame = false) => (
+    <RoomTopBar
+      playerCount={connectedPlayers.length}
+      maxPlayers={currentRoom?.config.maxPlayers ?? 0}
+      onLeave={handleLeaveRoom}
+      leaveTitle={midGame ? 'Leave the game?' : 'Leave this room?'}
+      leaveMessage={
+        midGame
+          ? 'You will drop out mid-round and lose your score for this game. The others keep playing.'
+          : 'You will drop out of this room. You can rejoin with the code while it is still open.'
+      }
+    >
+      {subtitle}
+    </RoomTopBar>
   )
 
   // ── Still resolving a deep link ───────────────────────────────────────────
@@ -252,6 +278,10 @@ export default function Room() {
 
     return (
       <div className="max-w-game lg:max-w-4xl mx-auto px-4 py-6 sm:py-8 space-y-6">
+        {topBar(
+          <span className="text-xs font-mono tracking-[0.15em] text-muted">{currentRoom.code}</span>
+        )}
+
         {banner}
 
         <div className="text-center space-y-2">
@@ -269,6 +299,7 @@ export default function Room() {
               maxPlayers={currentRoom.config.maxPlayers}
               currentUserId={user?.id}
               showScores={currentRound > 0}
+              allowFriendRequests
             />
 
             {showCountdown ? (
@@ -305,9 +336,6 @@ export default function Room() {
                       End Session
                     </Button>
                   )}
-                  <Button variant="ghost" onClick={handleLeaveRoom} icon={<LogOut className="w-4 h-4" />}>
-                    Leave
-                  </Button>
                 </div>
               </div>
             )}
@@ -325,7 +353,11 @@ export default function Room() {
     const hasVoted = leaderboard.some(e => e.socketId === currentPlayer?.socketId && e.playedAgain)
 
     return (
-      <div className="max-w-game mx-auto px-4 py-8 sm:py-12 space-y-6">
+      <div className="max-w-game lg:max-w-4xl mx-auto px-4 py-6 sm:py-10 space-y-6">
+        {topBar(
+          <span className="text-xs font-mono tracking-[0.15em] text-muted">{currentRoom.code}</span>
+        )}
+
         {banner}
 
         <div className="text-center space-y-3">
@@ -333,25 +365,38 @@ export default function Room() {
           <h2 className="font-heading text-2xl font-semibold">Game Over</h2>
         </div>
 
-        <RoomLeaderboard entries={leaderboard} rounds={currentRound} currentUserId={user?.id} showVotes />
+        {/* Chat stays available on the final screen — this is where people say
+            "good game" and agree on another round. */}
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
+          <div className="space-y-6">
+            <RoomLeaderboard entries={leaderboard} rounds={currentRound} currentUserId={user?.id} showVotes />
 
-        <div className="space-y-3">
-          <Button
-            fullWidth
-            onClick={playAgain}
-            disabled={!canAct || hasVoted}
-            variant={hasVoted ? 'secondary' : 'primary'}
-          >
-            {hasVoted ? 'Waiting for others' : 'Play Again'} ({playAgainVotes}/{votesNeeded})
-          </Button>
-          {isHost && (
-            <Button variant="ghost" fullWidth onClick={endRoom} disabled={!canAct}>
-              End Session
-            </Button>
-          )}
-          <Button variant="ghost" fullWidth onClick={handleLeaveRoom}>
-            Exit to Lobby
-          </Button>
+            <PlayerList
+              players={players}
+              hostSocketId={currentRoom.hostSocketId}
+              maxPlayers={currentRoom.config.maxPlayers}
+              currentUserId={user?.id}
+              allowFriendRequests
+            />
+
+            <div className="space-y-3">
+              <Button
+                fullWidth
+                onClick={playAgain}
+                disabled={!canAct || hasVoted}
+                variant={hasVoted ? 'secondary' : 'primary'}
+              >
+                {hasVoted ? 'Waiting for others' : 'Play Again'} ({playAgainVotes}/{votesNeeded})
+              </Button>
+              {isHost && (
+                <Button variant="ghost" fullWidth onClick={endRoom} disabled={!canAct}>
+                  End Session
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {chatPanel}
         </div>
       </div>
     )
@@ -365,6 +410,13 @@ export default function Room() {
 
     return (
       <div className="max-w-game lg:max-w-4xl mx-auto px-4 py-6 space-y-6">
+        {topBar(
+          <span className="text-xs font-medium text-muted">
+            Round {currentRound}
+            {totalRounds ? ` of ${totalRounds}` : ''} · results
+          </span>
+        )}
+
         {banner}
 
         <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
@@ -378,15 +430,10 @@ export default function Room() {
             <RoomLeaderboard entries={leaderboard} rounds={currentRound} currentUserId={user?.id} />
 
             {isFinalRound ? (
-              <div className="space-y-3">
-                <p className="flex items-center justify-center gap-2 text-center text-sm text-muted">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Final round — tallying up the results…
-                </p>
-                <Button variant="ghost" fullWidth onClick={handleLeaveRoom}>
-                  Leave Room
-                </Button>
-              </div>
+              <p className="flex items-center justify-center gap-2 text-center text-sm text-muted">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Final round — tallying up the results…
+              </p>
             ) : (
               <div className="space-y-4">
                 {/* Who still has to ready up before the next round can start. */}
@@ -411,6 +458,7 @@ export default function Room() {
                     maxPlayers={currentRoom.config.maxPlayers}
                     currentUserId={user?.id}
                     showScores
+                    allowFriendRequests
                   />
 
                   <p className="text-center text-xs text-muted">
@@ -437,9 +485,6 @@ export default function Room() {
                       End Session
                     </Button>
                   )}
-                  <Button variant="ghost" fullWidth onClick={handleLeaveRoom}>
-                    Leave Room
-                  </Button>
                 </div>
               </div>
             )}
@@ -456,24 +501,28 @@ export default function Room() {
 
   return (
     <div className="max-w-game lg:max-w-5xl mx-auto px-4 py-6 space-y-5">
+      {topBar(
+        <span className="text-xs font-medium text-muted">
+          Round {currentRound}
+          {totalRounds ? ` of ${totalRounds}` : ''}
+        </span>,
+        true
+      )}
+
       {banner}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_300px] lg:items-start">
         <div className="space-y-5">
           <TimerBar timeRemaining={timeLeft} totalTime={totalTime} label={timerLabel} isUrgent={isUrgent} />
 
-          <div className="flex items-center justify-between gap-3 text-xs">
-            <span className="font-medium text-muted">
-              Round {currentRound}
-              {totalRounds ? ` of ${totalRounds}` : ''}
-            </span>
-            {phase === 'reconstruction' && (
+          {phase === 'reconstruction' && (
+            <div className="flex items-center justify-end text-xs">
               <span className="inline-flex items-center gap-1.5 text-muted">
                 <Users className="w-3.5 h-3.5" />
                 {submittedCount}/{totalSubmitters || connectedPlayers.length} submitted
               </span>
-            )}
-          </div>
+            </div>
+          )}
 
           <AnimatePresence mode="wait">
             {showColor && currentColor && (
@@ -523,10 +572,6 @@ export default function Room() {
               </motion.div>
             )}
           </AnimatePresence>
-
-          <Button variant="ghost" fullWidth onClick={handleLeaveRoom} icon={<LogOut className="w-4 h-4" />}>
-            Leave Game
-          </Button>
         </div>
 
         <div className="space-y-4">
@@ -543,6 +588,8 @@ export default function Room() {
             onSend={sendMessage}
             canSend={canAct}
             currentUserId={user?.id}
+            typingUsers={typingUsers}
+            onTyping={sendTyping}
             compact
           />
         </div>

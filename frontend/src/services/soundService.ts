@@ -1,8 +1,12 @@
 class SoundService {
+  /** Floor on how often the chat blip may fire, so a burst is one sound. */
+  private static readonly MESSAGE_SOUND_INTERVAL_MS = 900;
+
   private audioContext: AudioContext | null = null;
   private isMuted: boolean = false;
   private volume: number = 0.5;
   private initialized: boolean = false;
+  private lastMessageSoundAt: number = 0;
   
   constructor() {
     // Load preferences from localStorage
@@ -23,20 +27,20 @@ class SoundService {
     return this.audioContext;
   }
   
-  private playTone(frequency: number, duration: number, type: OscillatorType = 'sine') {
+  private playTone(frequency: number, duration: number, type: OscillatorType = 'sine', gainScale: number = 1) {
     if (this.isMuted) return;
-    
+
     this.initAudioContext().then(ctx => {
       const oscillator = ctx.createOscillator();
       const gainNode = ctx.createGain();
-      
+
       oscillator.connect(gainNode);
       gainNode.connect(ctx.destination);
-      
+
       oscillator.type = type;
       oscillator.frequency.value = frequency;
-      gainNode.gain.value = this.volume;
-      
+      gainNode.gain.value = this.volume * gainScale;
+
       oscillator.start();
       gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + duration);
       oscillator.stop(ctx.currentTime + duration);
@@ -69,6 +73,28 @@ class SoundService {
   playUnready() {
     this.playTone(587.33, 0.09, 'sine'); // D5
     setTimeout(() => this.playTone(392, 0.16, 'sine'), 70); // G4
+  }
+
+  /**
+   * Incoming chat message. Deliberately quiet and short — this fires mid-game
+   * while people are concentrating, so it has to register without pulling focus.
+   *
+   * Rate-limited here rather than at the call site: a burst of messages should
+   * produce one blip, and every caller would otherwise need the same guard.
+   */
+  playMessage() {
+    const now = Date.now();
+    if (now - this.lastMessageSoundAt < SoundService.MESSAGE_SOUND_INTERVAL_MS) return;
+    this.lastMessageSoundAt = now;
+
+    this.playTone(1174.66, 0.05, 'sine', 0.28); // D6
+    setTimeout(() => this.playTone(1567.98, 0.07, 'sine', 0.22), 45); // G6
+  }
+
+  /** A friend request or room invite arrived — two soft rising notes. */
+  playNotify() {
+    this.playTone(880, 0.08, 'triangle', 0.35); // A5
+    setTimeout(() => this.playTone(1318.51, 0.14, 'triangle', 0.3), 90); // E6
   }
   
   // Round start chime

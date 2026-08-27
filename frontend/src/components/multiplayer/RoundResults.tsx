@@ -94,7 +94,7 @@ export function RoundResults({ results, targetColor, currentUserId, round }: Rou
                 <p className="text-[11px] text-muted font-mono truncate">
                   {hslLabel(result.userColor)}
                   {targetColor && (
-                    <span className="hidden sm:inline text-muted/70">
+                    <span className="hidden sm:inline text-muted">
                       {' · Δ '}
                       {hslDelta(result.userColor, targetColor)}
                     </span>

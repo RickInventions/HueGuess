@@ -124,7 +124,20 @@ export interface CompetitiveStats {
 }
 
 // Leaderboard types
+export type LeaderboardPeriod = 'all-time' | 'weekly' | 'daily';
+export type LeaderboardSortBy = 'points' | 'gamesPlayed' | 'avgAccuracy' | 'streak';
+export type LeaderboardSortOrder = 'ASC' | 'DESC';
+
+/** Present only on the weekly and daily boards; scoped to that window. */
+export interface LeaderboardPeriodStats {
+  games: number;
+  pointsGained: number;
+  avgAccuracy: number;
+  bestStreak: number;
+}
+
 export interface LeaderboardEntry {
+  /** Position on the whole board, not within the filtered page. */
   rank: number;
   userId: string;
   username: string;
@@ -133,20 +146,40 @@ export interface LeaderboardEntry {
   gamesPlayed: number;
   avgAccuracy: number;
   bestStreak: number;
-  periodStats?: {
-    gamesThisWeek?: number;
-    weeklyAvgAccuracy?: number;
-    gamesToday?: number;
-    dailyAvgAccuracy?: number;
-  };
+  periodStats: LeaderboardPeriodStats | null;
+}
+
+export interface LeaderboardPage {
+  entries: LeaderboardEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+  /** Echoed back by the server, so the client labels what was actually served. */
+  period: LeaderboardPeriod;
+  sortBy: LeaderboardSortBy;
+  sortOrder: LeaderboardSortOrder;
+  minRankedGames: number;
+}
+
+export interface LeaderboardGlobalStats {
+  totalPlayers: number;
+  rankedPlayers: number;
+  avgRating: number;
+  highestRating: number;
+  totalGames: number;
+  topPlayer: string | null;
+  topPlayerRating: number | null;
+  minRankedGames: number;
 }
 
 export interface AwardEmblem {
+  key: string;
   category: string;
   icon: string;
-  rank: number;
   username: string;
   value: number;
+  /** Rendered straight after the value, e.g. '%'. */
+  suffix: string;
 }
 
 // Daily challenge types

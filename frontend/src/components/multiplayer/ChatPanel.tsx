@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { MessageCircle, SendHorizontal } from 'lucide-react'
 import type { ChatMessage } from '../../types/multiplayer'
 import { Card } from '../ui/Card'
@@ -11,15 +11,29 @@ interface ChatPanelProps {
   currentUserId?: string
   /** Shorter list on the in-game layout, where the board needs the room. */
   compact?: boolean
+  /** Usernames composing a message right now, excluding you. */
+  typingUsers?: string[]
+  /** Announce composing state. Throttled by the context — safe to call per keystroke. */
+  onTyping?: (isTyping: boolean) => void
   className?: string
 }
 
 const MAX_RENDERED = 50
 
+/** How long after the last keystroke we consider someone to have stopped. */
+const TYPING_IDLE_MS = 2_500
+
 function timeLabel(timestamp: string): string {
   const date = new Date(timestamp)
   if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+/** "Ana is typing…" / "Ana and Bo are typing…" / "3 people are typing…" */
+function typingLabel(names: string[]): string {
+  if (names.length === 1) return `${names[0]} is typing…`
+  if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`
+  return `${names.length} people are typing…`
 }
 
 export function ChatPanel({
@@ -28,6 +42,8 @@ export function ChatPanel({
   canSend,
   currentUserId,
   compact = false,
+  typingUsers = [],
+  onTyping,
   className = '',
 }: ChatPanelProps) {
   const [input, setInput] = useState('')
@@ -40,11 +56,50 @@ export function ChatPanel({
   // Keyed on the array identity, not its length: the context caps the history at
   // 100, so past that point every new message leaves the length unchanged and a
   // length-keyed effect would quietly stop following the conversation.
+  //
+  // The indicator sits inside the scroller, so its appearance has to re-pin too.
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
-  }, [messages, compact])
+  }, [messages, compact, typingUsers.length])
+
+  // ── Outgoing typing signal ────────────────────────────────────────────────
+  // A timer rather than a blur/keyup pair: someone who types a few words and then
+  // sits still has stopped, even with the field still focused.
+  const idleTimer = useRef<number | null>(null)
+  const onTypingRef = useRef(onTyping)
+  onTypingRef.current = onTyping
+
+  const stopTyping = useCallback(() => {
+    if (idleTimer.current !== null) {
+      window.clearTimeout(idleTimer.current)
+      idleTimer.current = null
+    }
+    onTypingRef.current?.(false)
+  }, [])
+
+  // Unmounting mid-sentence (leaving the room, a phase change swapping layouts)
+  // would otherwise leave the indicator up for the rest of its TTL.
+  useEffect(() => {
+    return () => {
+      if (idleTimer.current !== null) window.clearTimeout(idleTimer.current)
+    }
+  }, [])
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(event.target.value)
+    if (!canSend || !onTypingRef.current) return
+
+    if (event.target.value.trim().length === 0) {
+      stopTyping()
+      return
+    }
+
+    onTypingRef.current(true)
+    if (idleTimer.current !== null) window.clearTimeout(idleTimer.current)
+    idleTimer.current = window.setTimeout(stopTyping, TYPING_IDLE_MS)
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,6 +107,7 @@ export function ChatPanel({
     if (!text || !canSend) return
     onSend(text)
     setInput('')
+    stopTyping()
   }
 
   const visible = messages.slice(-MAX_RENDERED)
@@ -94,7 +150,7 @@ export function ChatPanel({
                     }`}
                   >
                     {isYou ? 'You' : msg.username}
-                    <span className="ml-1.5 font-mono text-muted/60">{timeLabel(msg.timestamp)}</span>
+                    <span className="ml-1.5 font-mono text-muted">{timeLabel(msg.timestamp)}</span>
                   </span>
                 )}
                 <span
@@ -110,13 +166,31 @@ export function ChatPanel({
             )
           })
         )}
+
+        {/* Inside the scroller so it sits directly under the last message and
+            scrolls with it, rather than pushing the composer around. */}
+        {typingUsers.length > 0 && (
+          <div className="flex items-center gap-1.5 pt-0.5 pl-1">
+            <span className="flex gap-1" aria-hidden="true">
+              {[0, 1, 2].map(i => (
+                <span
+                  key={i}
+                  className="w-1.5 h-1.5 rounded-full bg-muted/50 animate-bounce"
+                  style={{ animationDelay: `${i * 140}ms`, animationDuration: '1s' }}
+                />
+              ))}
+            </span>
+            <span className="text-[10px] text-muted italic truncate">{typingLabel(typingUsers)}</span>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="flex gap-2">
         <input
           type="text"
           value={input}
-          onChange={e => setInput(e.target.value)}
+          onChange={handleChange}
+          onBlur={stopTyping}
           placeholder={canSend ? 'Type a message…' : 'Reconnecting…'}
           maxLength={200}
           aria-label="Chat message"

@@ -1,310 +1,612 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
-import { Trophy, Search, ChevronDown, Medal, Target, TrendingUp, Zap, ArrowLeft } from 'lucide-react'
-import { leaderboard } from '../lib/api'
-import { Card } from '../components/ui/Card'
-import { Button } from '../components/ui/Button'
+import {
+  ArrowLeft,
+  ArrowUpDown,
+  ChevronDown,
+  Crown,
+  Info,
+  Medal,
+  Search,
+  Target,
+  Trophy,
+  Users,
+  X,
+  Zap,
+} from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
+import { leaderboard as leaderboardApi } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
+import { RankBadge } from '../components/ui/RankBadge'
+import type {
+  AwardEmblem,
+  LeaderboardEntry,
+  LeaderboardGlobalStats,
+  LeaderboardPeriod,
+  LeaderboardSortBy,
+  LeaderboardSortOrder,
+} from '../types'
 
-type Period = 'all-time' | 'weekly' | 'daily'
-type SortBy = 'points' | 'gamesPlayed' | 'avgAccuracy' | 'streak'
-type SortOrder = 'ASC' | 'DESC'
+const PERIODS: { key: LeaderboardPeriod; label: string; short: string }[] = [
+  { key: 'all-time', label: 'All time', short: 'All time' },
+  { key: 'weekly', label: 'This week', short: 'Week' },
+  { key: 'daily', label: 'Today', short: 'Today' },
+]
+
+const medalFor = (rank: number) => (rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null)
+
+const percent = (value: number) => `${value.toFixed(1)}%`
+const signed = (value: number) => `${value > 0 ? '+' : ''}${value.toLocaleString()}`
+
+function StatTile({
+  icon,
+  value,
+  label,
+  tone = 'text-primary',
+}: {
+  icon: ReactNode
+  value: ReactNode
+  label: string
+  tone?: string
+}) {
+  return (
+    <div className="rounded-card border border-border bg-surface p-3 text-center shadow-card">
+      <span className={`mx-auto mb-1.5 block w-fit ${tone}`}>{icon}</span>
+      <p className="truncate font-heading text-lg font-semibold text-deep sm:text-xl">{value}</p>
+      <p className="text-[10px] text-muted sm:text-xs">{label}</p>
+    </div>
+  )
+}
 
 export default function Leaderboard() {
   const navigate = useNavigate()
-  const [period, setPeriod] = useState<Period>('all-time')
-  const [sortBy, setSortBy] = useState<SortBy>('points')
-  const [sortOrder, setSortOrder] = useState<SortOrder>('DESC')
-  const [search, setSearch] = useState('')
-  const [entries, setEntries] = useState<any[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [awards, setAwards] = useState<any[]>([])
-  const [globalStats, setGlobalStats] = useState<any>(null)
+  const { user } = useAuth()
 
-  const loadLeaderboard = async () => {
-    setLoading(true)
-    try {
-      const [leaderboardRes, awardsRes, statsRes] = await Promise.all([
-        leaderboard.getLeaderboard({ period, sortBy, sortOrder, search, limit: 100 }),
-        leaderboard.getAwards(),
-        leaderboard.getGlobalStats(),
-      ])
-      setEntries(leaderboardRes.data.leaderboard.entries)
-      setTotal(leaderboardRes.data.leaderboard.total)
-      setAwards(awardsRes.data.awards)
-      setGlobalStats(statsRes.data.stats)
-    } catch (error) {
-      console.error('Failed to load leaderboard:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [period, setPeriod] = useState<LeaderboardPeriod>('all-time')
+  const [sortBy, setSortBy] = useState<LeaderboardSortBy>('points')
+  const [sortOrder, setSortOrder] = useState<LeaderboardSortOrder>('DESC')
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+
+  const [entries, setEntries] = useState<LeaderboardEntry[]>([])
+  const [total, setTotal] = useState(0)
+  const [awards, setAwards] = useState<AwardEmblem[]>([])
+  const [globalStats, setGlobalStats] = useState<LeaderboardGlobalStats | null>(null)
+  const [minRankedGames, setMinRankedGames] = useState(20)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadLeaderboard()
-  }, [period, sortBy, sortOrder, search])
+    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 350)
+    return () => window.clearTimeout(timer)
+  }, [search])
 
-  const getRankIcon = (rank: number) => {
-    if (rank === 1) return '🥇'
-    if (rank === 2) return '🥈'
-    if (rank === 3) return '🥉'
-    return `#${rank}`
-  }
+  // One request per filter change. The id guard drops a slow response that has
+  // been overtaken — otherwise typing fast can leave the board showing the
+  // results of a query you already moved on from.
+  const requestId = useRef(0)
 
-  const handleSort = (key: SortBy) => {
+  useEffect(() => {
+    const id = ++requestId.current
+    setLoading(true)
+
+    leaderboardApi
+      .getLeaderboard({
+        period,
+        sortBy,
+        sortOrder,
+        search: debouncedSearch || undefined,
+        limit: 100,
+      })
+      .then(({ data }) => {
+        if (id !== requestId.current) return
+        setEntries(data.leaderboard?.entries ?? [])
+        setTotal(data.leaderboard?.total ?? 0)
+        setAwards(data.awards ?? [])
+        setGlobalStats(data.globalStats ?? null)
+        setMinRankedGames(data.leaderboard?.minRankedGames ?? data.minRankedGames ?? 20)
+        setError(null)
+      })
+      .catch((err: unknown) => {
+        if (id !== requestId.current) return
+        console.error('Failed to load leaderboard:', err)
+        setEntries([])
+        setTotal(0)
+        setError('Could not load the leaderboard. Check your connection and try again.')
+      })
+      .finally(() => {
+        if (id === requestId.current) setLoading(false)
+      })
+  }, [period, sortBy, sortOrder, debouncedSearch])
+
+  const isPeriod = period !== 'all-time'
+  /** Medals only mean something on the canonical points-descending ranking. */
+  const showMedals = sortBy === 'points' && sortOrder === 'DESC'
+
+  /**
+   * One definition drives the desktop table, the mobile cards and the sort
+   * control, so a column can never sort by something it does not display.
+   */
+  const columns = useMemo(() => {
+    const definitions: {
+      key: LeaderboardSortBy
+      label: string
+      shortLabel: string
+      hint?: string
+      render: (entry: LeaderboardEntry) => ReactNode
+    }[] = [
+      {
+        key: 'points',
+        label: isPeriod ? 'Points gained' : 'Points',
+        shortLabel: 'Points',
+        hint: isPeriod ? 'HuePoints won or lost inside this window' : undefined,
+        render: entry =>
+          isPeriod && entry.periodStats ? (
+            <span
+              className={
+                entry.periodStats.pointsGained > 0
+                  ? 'text-success'
+                  : entry.periodStats.pointsGained < 0
+                    ? 'text-accent'
+                    : 'text-muted'
+              }
+            >
+              {signed(entry.periodStats.pointsGained)}
+            </span>
+          ) : (
+            <span className="text-deep">{entry.rating.toLocaleString()}</span>
+          ),
+      },
+      {
+        key: 'gamesPlayed',
+        label: 'Games',
+        shortLabel: 'Games',
+        render: entry =>
+          (isPeriod && entry.periodStats ? entry.periodStats.games : entry.gamesPlayed).toLocaleString(),
+      },
+      {
+        key: 'avgAccuracy',
+        label: 'Avg accuracy',
+        shortLabel: 'Accuracy',
+        render: entry =>
+          percent(isPeriod && entry.periodStats ? entry.periodStats.avgAccuracy : entry.avgAccuracy),
+      },
+      {
+        key: 'streak',
+        label: isPeriod ? 'Streak' : 'Best streak',
+        shortLabel: 'Streak',
+        hint: isPeriod ? 'Longest run inside this window' : 'Longest run ever',
+        render: entry => (
+          <span className="inline-flex items-center justify-end gap-1">
+            <Zap className="h-3 w-3 text-accent" aria-hidden="true" />
+            {isPeriod && entry.periodStats ? entry.periodStats.bestStreak : entry.bestStreak}
+          </span>
+        ),
+      },
+    ]
+    return definitions
+  }, [isPeriod])
+
+  const toggleSort = (key: LeaderboardSortBy) => {
     if (sortBy === key) {
-      // Toggle order if same column
-      setSortOrder(prev => prev === 'DESC' ? 'ASC' : 'DESC')
+      setSortOrder(prev => (prev === 'DESC' ? 'ASC' : 'DESC'))
     } else {
-      // New column: default to DESC
       setSortBy(key)
       setSortOrder('DESC')
     }
   }
 
-  const getSortIcon = (key: SortBy) => {
-    if (sortBy !== key) return null
-    return sortOrder === 'DESC' ? 
-      <ChevronDown className="w-3 h-3 inline ml-1" /> : 
-      <ChevronDown className="w-3 h-3 inline ml-1 rotate-180" />
+  const sortIndicator = (key: LeaderboardSortBy) => {
+    if (sortBy !== key) return <ArrowUpDown className="ml-1 inline h-3 w-3 opacity-40" />
+    return (
+      <ChevronDown
+        className={`ml-1 inline h-3 w-3 text-primary ${sortOrder === 'ASC' ? 'rotate-180' : ''}`}
+      />
+    )
   }
 
+  const periodNote = isPeriod
+    ? period === 'weekly'
+      ? 'Ranked on the last 7 days — only players who played in that window appear.'
+      : 'Ranked on the last 24 hours — only players who played in that window appear.'
+    : `Ranked on current HuePoints. Accounts qualify after ${minRankedGames} competitive games.`
+
+  const emptyMessage = debouncedSearch
+    ? `No ranked player matched “${debouncedSearch}”.`
+    : isPeriod
+      ? 'Nobody on the board has played in this window yet.'
+      : `No qualified players yet — ${minRankedGames} competitive games gets you on the board.`
+
+  const youAreListed = !!user && entries.some(entry => entry.username === user.username)
+  /**
+   * When the board is longer than the page, an absent player might simply be
+   * ranked below the cut rather than unqualified — so the two cases get
+   * different copy.
+   */
+  const boardTruncated = total > entries.length
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
-      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        {/* Header with Exit Button */}
-        <div className="flex items-center justify-between mb-6 sm:mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-base via-surface to-primary/[0.05]">
+      <div className="mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-8">
+        {/* ── Header ──────────────────────────────────────────────────────── */}
+        <div className="mb-5 flex items-center gap-2 sm:mb-8">
           <button
             onClick={() => navigate('/')}
-            className="flex items-center gap-1 text-muted hover:text-deep transition-colors p-2 -ml-2 active:scale-95 touch-manipulation"
+            className="flex shrink-0 items-center gap-1 rounded-button p-2 text-muted transition-colors hover:bg-surface-alt hover:text-deep cursor-pointer"
           >
-            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
             <span className="text-xs sm:text-sm">Exit</span>
           </button>
-          <div className="text-center flex-1">
-            <h1 className="font-heading text-2xl sm:text-3xl md:text-4xl font-bold bg-gradient-to-r from-yellow-500 to-primary bg-clip-text text-transparent">
+          <div className="min-w-0 flex-1 text-center">
+            <h1 className="font-heading text-2xl font-bold text-deep sm:text-3xl md:text-4xl">
               Leaderboard
             </h1>
-            <p className="text-muted text-xs sm:text-sm mt-1">Top 100 players with ≥20 competitive games</p>
+            <p className="mt-1 text-xs text-muted sm:text-sm">{periodNote}</p>
           </div>
-          <div className="w-16 sm:w-20" /> {/* Spacer for centering */}
+          {/* Balances the exit button so the title stays optically centred. */}
+          <div className="w-[68px] shrink-0 sm:w-[76px]" aria-hidden="true" />
         </div>
 
-        {/* Global Stats Cards */}
+        {/* ── Global stats ────────────────────────────────────────────────── */}
         {globalStats && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-6 sm:mb-8"
+            className="mb-5 grid grid-cols-2 gap-2 sm:mb-7 sm:grid-cols-4 sm:gap-3"
           >
-            <Card className="text-center p-2 sm:p-3">
-              <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-500 mx-auto mb-1" />
-              <p className="text-lg sm:text-2xl font-bold">{globalStats.totalPlayers}</p>
-              <p className="text-[10px] sm:text-xs text-muted">Players</p>
-            </Card>
-            <Card className="text-center p-2 sm:p-3">
-              <Medal className="w-4 h-4 sm:w-5 sm:h-5 text-primary mx-auto mb-1" />
-              <p className="text-lg sm:text-2xl font-bold">{globalStats.highestRating}</p>
-              <p className="text-[10px] sm:text-xs text-muted">Top Score</p>
-            </Card>
-            <Card className="text-center p-2 sm:p-3">
-              <Target className="w-4 h-4 sm:w-5 sm:h-5 text-accent mx-auto mb-1" />
-              <p className="text-lg sm:text-2xl font-bold">{Math.round(globalStats.avgRating)}</p>
-              <p className="text-[10px] sm:text-xs text-muted">Avg Rating</p>
-            </Card>
-            <Card className="text-center p-2 sm:p-3">
-              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-success mx-auto mb-1" />
-              <p className="text-xs sm:text-sm font-semibold truncate">{globalStats.topPlayer}</p>
-              <p className="text-[10px] sm:text-xs text-muted">Top Player</p>
-            </Card>
+            <StatTile
+              icon={<Users className="h-4 w-4 sm:h-5 sm:w-5" />}
+              value={globalStats.rankedPlayers.toLocaleString()}
+              label="Ranked players"
+            />
+            <StatTile
+              icon={<Medal className="h-4 w-4 sm:h-5 sm:w-5" />}
+              value={globalStats.highestRating.toLocaleString()}
+              label="Highest points"
+              tone="text-accent"
+            />
+            <StatTile
+              icon={<Target className="h-4 w-4 sm:h-5 sm:w-5" />}
+              value={globalStats.avgRating.toLocaleString()}
+              label="Average points"
+              tone="text-success"
+            />
+            <StatTile
+              icon={<Crown className="h-4 w-4 sm:h-5 sm:w-5" />}
+              value={globalStats.topPlayer ?? '—'}
+              label="Points leader"
+              tone="text-primary"
+            />
           </motion.div>
         )}
 
-        {/* Award Emblems */}
+        {/* ── Awards ──────────────────────────────────────────────────────── */}
         {awards.length > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            className="mb-6 sm:mb-8"
+            transition={{ delay: 0.05 }}
+            className="mb-5 sm:mb-7"
           >
-            <h2 className="font-heading font-semibold text-base sm:text-lg mb-2 sm:mb-3 flex items-center gap-2">
-              <Medal className="w-4 h-4 sm:w-5 sm:h-5 text-accent" />
-              Award Emblems
+            <h2 className="mb-2 flex items-center gap-2 font-heading text-sm font-semibold uppercase tracking-wider text-muted sm:mb-3">
+              <Medal className="h-4 w-4" />
+              Award emblems
             </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-              {awards.map((award) => (
-                <Card key={award.category} className="p-2 sm:p-3 text-center">
-                  <div className="text-2xl sm:text-3xl mb-1">{award.icon}</div>
-                  <p className="font-semibold text-xs sm:text-sm">{award.category}</p>
-                  <p className="text-[10px] sm:text-xs text-muted truncate">{award.username}</p>
-                  <p className="text-[10px] sm:text-xs font-mono text-primary">{award.value}</p>
-                </Card>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+              {awards.map(award => (
+                <Link
+                  key={award.key}
+                  to={`/profile/${award.username}`}
+                  className="rounded-card border border-border bg-surface p-3 text-center shadow-card transition-colors hover:border-primary/30 hover:bg-surface-alt"
+                >
+                  <div className="text-2xl sm:text-3xl">{award.icon}</div>
+                  <p className="mt-1 text-xs font-semibold text-deep sm:text-sm">{award.category}</p>
+                  <p className="truncate text-[11px] text-muted">{award.username}</p>
+                  <p className="font-mono text-[11px] text-primary">
+                    {award.value.toLocaleString()}
+                    {award.suffix}
+                  </p>
+                </Link>
               ))}
             </div>
           </motion.div>
         )}
 
-        {/* Filters - Responsive Wrap */}
+        {/* ── Filters ─────────────────────────────────────────────────────── */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="flex flex-wrap items-center gap-2 sm:gap-3 mb-4 sm:mb-6"
+          transition={{ delay: 0.1 }}
+          className="mb-3 space-y-2.5 sm:mb-4"
         >
-          {/* Period Tabs */}
-          <div className="flex gap-1 sm:gap-2">
-            {(['all-time', 'weekly', 'daily'] as Period[]).map((p) => (
-              <Button
-                key={p}
-                variant={period === p ? 'primary' : 'ghost'}
-                onClick={() => setPeriod(p)}
-                className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-2"
-              >
-                {p === 'all-time' ? 'All Time' : p === 'weekly' ? 'This Week' : 'Today'}
-              </Button>
-            ))}
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+            <div
+              role="tablist"
+              aria-label="Leaderboard period"
+              className="flex gap-1 rounded-button bg-surface-alt p-1"
+            >
+              {PERIODS.map(item => (
+                <button
+                  key={item.key}
+                  role="tab"
+                  aria-selected={period === item.key}
+                  onClick={() => setPeriod(item.key)}
+                  className={`flex-1 whitespace-nowrap rounded-button px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer sm:text-sm ${
+                    period === item.key
+                      ? 'bg-surface text-deep shadow-card'
+                      : 'text-muted hover:text-deep'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <input
+                type="text"
+                value={search}
+                onChange={event => setSearch(event.target.value)}
+                placeholder="Search by username"
+                autoComplete="off"
+                aria-label="Search the leaderboard by username"
+                // 16px on phones: anything smaller makes iOS Safari zoom on focus.
+                className="w-full rounded-button border border-border bg-surface-alt py-2.5 pl-9 pr-9 text-base text-deep placeholder:text-muted focus:border-primary/40 focus:outline-none sm:text-sm"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch('')}
+                  aria-label="Clear search"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-button p-1 text-muted transition-colors hover:bg-surface hover:text-deep cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Sort Buttons (Integrated ASC/DESC) */}
-          <div className="flex flex-wrap items-center gap-1 sm:gap-2 ml-auto">
-            {(['points', 'gamesPlayed', 'avgAccuracy', 'streak'] as SortBy[]).map((s) => (
-              <Button
-                key={s}
-                variant={sortBy === s ? 'primary' : 'ghost'}
-                onClick={() => handleSort(s)}
-                className="text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-2"
+          {/* Desktop sorts live on the table headers; phones get pills. */}
+          <div className="flex flex-wrap items-center gap-1.5 md:hidden">
+            <span className="text-[11px] uppercase tracking-wider text-muted">Sort</span>
+            {columns.map(column => (
+              <button
+                key={column.key}
+                onClick={() => toggleSort(column.key)}
+                className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer ${
+                  sortBy === column.key
+                    ? 'border-primary/40 bg-primary/10 text-deep'
+                    : 'border-border bg-surface text-muted'
+                }`}
               >
-                {s === 'points' ? 'Points' : s === 'gamesPlayed' ? 'Games' : s === 'avgAccuracy' ? 'Accuracy' : 'Streak'}
-                {getSortIcon(s)}
-              </Button>
+                {column.shortLabel}
+                {sortIndicator(column.key)}
+              </button>
             ))}
           </div>
         </motion.div>
 
-        {/* Search */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.25 }}
-          className="relative mb-4 sm:mb-6"
-        >
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 sm:w-4 sm:h-4 text-muted" />
-          <input
-            type="text"
-            placeholder="Search by username..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 sm:pl-10 pr-3 sm:pr-4 py-2 text-sm sm:text-base rounded-button bg-surface-alt border border-border focus:outline-none focus:shadow-glow-primary"
-          />
-        </motion.div>
+        {error && (
+          <div className="mb-3 flex items-start gap-2 rounded-card border border-accent/20 bg-accent/10 p-3 text-sm text-accent">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
-        {/* Leaderboard Table - Responsive, No Horizontal Scroll */}
-<motion.div
-  initial={{ opacity: 0 }}
-  animate={{ opacity: 1 }}
-  transition={{ delay: 0.3 }}
->
-  <Card className="overflow-hidden">
-    {/* Table layout for md screens and up */}
-    <div className="hidden md:block overflow-x-auto">
-      <table className="w-full">
-        <thead className="bg-surface-alt border-b border-border">
-          <tr>
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted">Rank</th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-muted">Player</th>
-            <th className="px-4 py-3 text-right text-xs font-medium text-muted">Rating</th>
-            <th className="px-4 py-3 text-right text-xs font-medium text-muted">Games</th>
-            <th className="px-4 py-3 text-right text-xs font-medium text-muted">Avg Acc</th>
-            <th className="px-4 py-3 text-right text-xs font-medium text-muted">Best Streak</th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
-            <tr>
-              <td colSpan={6} className="text-center py-12">
-                <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-              </td>
-            </tr>
-          ) : entries.length === 0 ? (
-            <tr>
-              <td colSpan={6} className="text-center py-12 text-muted">
-                No players found
-              </td>
-            </tr>
-          ) : (
-            entries.map((entry) => (
-              <tr key={entry.userId} className="border-b border-border hover:bg-surface-alt transition-colors">
-                <td className="px-4 py-3 text-sm font-mono">{getRankIcon(entry.rank)}</td>
-                <td className="px-4 py-3">
-                  <Link to={`/profile/${entry.username}`} className="font-medium hover:text-primary transition-colors">
-                    {entry.username}
-                  </Link>
-                </td>
-                <td className="px-4 py-3 text-right font-heading font-semibold">{entry.rating}</td>
-                <td className="px-4 py-3 text-right text-muted text-sm">{entry.gamesPlayed}</td>
-                <td className="px-4 py-3 text-right text-muted text-sm">{entry.avgAccuracy}%</td>
-                <td className="px-4 py-3 text-right text-muted text-sm">
-                  <div className="flex items-center justify-end gap-1">
-                    <Zap className="w-3 h-3 text-yellow-500" />
-                    {entry.bestStreak}
-                  </div>
-                </td>
-              </tr>
-            ))
+        {/* ── Board ───────────────────────────────────────────────────────── */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}>
+          <div className="overflow-hidden rounded-card border border-border bg-surface shadow-card">
+            {/* Table on md and up */}
+            <div className="hidden md:block">
+              <table className="w-full">
+                <thead className="border-b border-border bg-surface-alt">
+                  <tr>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-muted">
+                      #
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-muted">
+                      Player
+                    </th>
+                    {columns.map(column => (
+                      <th
+                        key={column.key}
+                        scope="col"
+                        aria-sort={
+                          sortBy === column.key
+                            ? sortOrder === 'DESC'
+                              ? 'descending'
+                              : 'ascending'
+                            : 'none'
+                        }
+                        className="px-4 py-3 text-right text-xs font-medium"
+                      >
+                        <button
+                          onClick={() => toggleSort(column.key)}
+                          title={column.hint}
+                          className={`inline-flex items-center transition-colors cursor-pointer ${
+                            sortBy === column.key ? 'text-deep' : 'text-muted hover:text-deep'
+                          }`}
+                        >
+                          {column.label}
+                          {sortIndicator(column.key)}
+                        </button>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={2 + columns.length} className="py-14 text-center">
+                        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      </td>
+                    </tr>
+                  ) : entries.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={2 + columns.length}
+                        className="px-4 py-14 text-center text-sm text-muted"
+                      >
+                        {emptyMessage}
+                      </td>
+                    </tr>
+                  ) : (
+                    entries.map(entry => {
+                      const isYou = !!user && entry.username === user.username
+                      const medal = showMedals ? medalFor(entry.rank) : null
+                      return (
+                        <tr
+                          key={entry.userId}
+                          className={`border-b border-border last:border-0 transition-colors ${
+                            isYou ? 'bg-primary/[0.06]' : 'hover:bg-surface-alt'
+                          }`}
+                        >
+                          <td className="px-4 py-3 font-mono text-sm text-deep">
+                            {medal ?? `#${entry.rank}`}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Link
+                                to={`/profile/${entry.username}`}
+                                className="font-medium text-deep transition-colors hover:text-primary"
+                              >
+                                {entry.username}
+                              </Link>
+                              {isYou && (
+                                <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                                  You
+                                </span>
+                              )}
+                              <RankBadge label={entry.rankTier} size="xs" />
+                              {isPeriod && (
+                                <span className="font-mono text-[11px] text-muted">
+                                  {entry.rating.toLocaleString()} pts
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          {columns.map(column => (
+                            <td
+                              key={column.key}
+                              className={`px-4 py-3 text-right text-sm ${
+                                sortBy === column.key
+                                  ? 'font-heading font-semibold text-deep'
+                                  : 'text-muted'
+                              }`}
+                            >
+                              {column.render(entry)}
+                            </td>
+                          ))}
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Cards below md */}
+            <div className="divide-y divide-border md:hidden">
+              {loading ? (
+                <div className="py-14 text-center">
+                  <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                </div>
+              ) : entries.length === 0 ? (
+                <div className="px-4 py-14 text-center text-sm text-muted">{emptyMessage}</div>
+              ) : (
+                entries.map(entry => {
+                  const isYou = !!user && entry.username === user.username
+                  const medal = showMedals ? medalFor(entry.rank) : null
+                  return (
+                    <div
+                      key={entry.userId}
+                      className={`p-3.5 ${isYou ? 'bg-primary/[0.06]' : ''}`}
+                    >
+                      <div className="flex items-start gap-2.5">
+                        <span className="mt-0.5 w-9 shrink-0 font-mono text-base font-bold text-deep">
+                          {medal ?? `#${entry.rank}`}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <Link
+                              to={`/profile/${entry.username}`}
+                              className="truncate font-semibold text-deep"
+                            >
+                              {entry.username}
+                            </Link>
+                            {isYou && (
+                              <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                                You
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <RankBadge label={entry.rankTier} size="xs" />
+                            {isPeriod && (
+                              <span className="font-mono text-[11px] text-muted">
+                                {entry.rating.toLocaleString()} pts
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-2.5 grid grid-cols-4 gap-1.5 text-center">
+                        {columns.map(column => (
+                          <div
+                            key={column.key}
+                            className={`rounded-xl px-1 py-1.5 ${
+                              sortBy === column.key ? 'bg-primary/10' : 'bg-surface-alt'
+                            }`}
+                          >
+                            <p className="truncate text-[10px] text-muted">{column.shortLabel}</p>
+                            <p className="text-xs font-semibold text-deep">{column.render(entry)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+
+          {!loading && entries.length > 0 && (
+            <p className="mt-3 text-center text-xs text-muted">
+              Showing {entries.length.toLocaleString()} of {total.toLocaleString()}
+              {debouncedSearch ? ' matching' : ' qualified'} player{total === 1 ? '' : 's'}
+              {total > entries.length && ' — refine your search to find someone further down'}
+            </p>
           )}
-        </tbody>
-      </table>
-    </div>
+        </motion.div>
 
-    {/* Card layout for mobile (below md) */}
-    <div className="md:hidden divide-y divide-border">
-      {loading ? (
-        <div className="py-12 text-center">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-        </div>
-      ) : entries.length === 0 ? (
-        <div className="py-12 text-center text-muted">No players found</div>
-      ) : (
-        entries.map((entry) => (
-          <div key={entry.userId} className="p-4 space-y-2 hover:bg-surface-alt transition-colors">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-lg font-mono font-bold">{getRankIcon(entry.rank)}</span>
-                <Link to={`/profile/${entry.username}`} className="font-semibold hover:text-primary transition-colors">
-                  {entry.username}
-                </Link>
-              </div>
-              <div className="flex items-center gap-1">
-                <Zap className="w-3 h-3 text-yellow-500" />
-                <span className="text-sm font-medium">{entry.bestStreak}</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-sm">
-              <div>
-                <p className="text-[10px] text-muted">Rating</p>
-                <p className="font-heading font-semibold">{entry.rating}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted">Games</p>
-                <p className="text-muted">{entry.gamesPlayed}</p>
-              </div>
-              <div>
-                <p className="text-[10px] text-muted">Avg Acc</p>
-                <p className="text-muted">{entry.avgAccuracy}%</p>
-              </div>
-            </div>
+        {/* Without this, an unqualified player just sees a board they are missing
+            from and no reason why. Suppressed while searching, where their own
+            absence from the results means nothing. */}
+        {!loading && !!user && !debouncedSearch && !youAreListed && (
+          <div className="mt-4 flex items-start gap-2 rounded-card border border-border bg-surface p-3.5 text-xs text-muted shadow-card sm:text-sm">
+            <Trophy className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
+            <span>
+              {boardTruncated ? (
+                <>
+                  You are not in the top {entries.length.toLocaleString()} here — search your
+                  username to see your exact position on the board.
+                </>
+              ) : isPeriod ? (
+                'You are not on this board. Play a competitive game inside this window to appear here.'
+              ) : (
+                <>
+                  You are not on this board. Accounts qualify after {minRankedGames} competitive
+                  games — check your total on your{' '}
+                  <Link to="/profile" className="font-medium text-primary hover:underline">
+                    profile
+                  </Link>
+                  .
+                </>
+              )}
+            </span>
           </div>
-        ))
-      )}
-    </div>
-  </Card>
-  <p className="text-xs text-muted text-center mt-4">
-    Showing {entries.length} of {total} qualified players
-  </p>
-</motion.div>
+        )}
       </div>
     </div>
   )

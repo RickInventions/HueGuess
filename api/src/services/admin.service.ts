@@ -1,4 +1,5 @@
 import pool from '../config/db.js';
+import { backfillRankTiers } from '../config/bootstrap.js';
 
 export class AdminService {
   
@@ -96,11 +97,20 @@ export class AdminService {
     return result.rows[0] || null;
   }
   
-  // Refresh leaderboard materialized views
+  // Reconcile the leaderboard's denormalised data.
+  // There is nothing to materialise — every ranking is read live from
+  // competitive_stats — so the one thing that can drift is the stored rank_tier
+  // label, which this rewrites onto the current ladder.
   static async refreshLeaderboard() {
-    await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY leaderboard_all_time');
-    await pool.query('REFRESH MATERIALIZED VIEW CONCURRENTLY leaderboard_weekly');
-    return { success: true, message: 'Leaderboard refreshed' };
+    const updated = await backfillRankTiers();
+    return {
+      success: true,
+      updated,
+      message:
+        updated > 0
+          ? `Rank labels rewritten for ${updated} account(s)`
+          : 'Rank labels already current',
+    };
   }
   
   // Log admin action

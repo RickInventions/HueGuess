@@ -2,6 +2,7 @@ import { Server as HttpServer } from 'http';
 import { Server as SocketServer, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { setupSocketHandlers } from './handlers.js';
+import { registerPresence, setPresenceServer } from './presence.js';
 import { SocketUser } from './types.js';
 import { JwtPayload } from '../types/index.js';
 
@@ -85,8 +86,12 @@ export function initializeSocketIO(server: HttpServer) {
     }
   });
 
+  // Lets the REST layer reach connected users (friend requests, room invites).
+  setPresenceServer(io);
+
   io.on('connection', socket => {
     const user = socket.data.user as SocketUser;
+    registerPresence(socket);
     console.log(
       `🔌 ${user.username} connected (${socket.id}${socket.recovered ? ', recovered' : ''}) via ${socket.conn.transport.name}`
     );

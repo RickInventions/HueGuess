@@ -12,6 +12,8 @@ import authRoutes from './routes/auth.routes.js';
 import gameRoutes from './routes/game.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import feedbackRoutes from './routes/feedback.routes.js';
+import friendRoutes from './routes/friend.routes.js';
+import { bootstrapSchema } from './config/bootstrap.js';
 
 dotenv.config();
 
@@ -44,8 +46,9 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);  
 app.use('/api/daily', dailyRoutes);        
 app.use('/api/achievements', achievementRoutes);    
-app.use('/api/user', userRoutes);  
+app.use('/api/user', userRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/friends', friendRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Health check
@@ -72,4 +75,9 @@ server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🔌 Socket.IO endpoint: http://localhost:${PORT}/socket.io`);
   console.log(`📡 Test Socket.IO at: http://localhost:${PORT}/socket-test`);
+
+  // After listen, not before: schema work talks to the database, and a slow or
+  // briefly unreachable database should delay the friends feature, not the
+  // whole server. bootstrapSchema() logs its own failures and never throws.
+  void bootstrapSchema();
 });

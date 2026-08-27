@@ -20,7 +20,7 @@ export interface RoomConfig {
   colorTimeSeconds: number;      // CT - memorization time (0.5-7)
   difficulty: Difficulty;
   specificRounds: number | null; // null = unlimited
-  maxPlayers: number;            // 2-4
+  maxPlayers: number;            // 2-8
 }
 
 export interface Room {
@@ -61,6 +61,21 @@ export interface ChatMessage {
   timestamp: string;
   userId?: string;
   socketId?: string;
+}
+
+/**
+ * Somebody is composing a message.
+ *
+ * Keyed by socketId rather than userId: the same account can legitimately have
+ * two tabs open, and the server broadcasts per socket.
+ */
+export interface TypingSignal {
+  socketId: string;
+  userId?: string;
+  username: string;
+  isTyping: boolean;
+  /** Epoch ms after which the client should drop the signal on its own. */
+  expiresAt?: number;
 }
 
 /** Full room state, sent on join and on every reconnect. */

@@ -100,45 +100,48 @@ const achievements = [
     requirement_metadata: null,
   },
   
-  // ELO/Rating achievements
+  // ELO/Rating achievements.
+  // Thresholds are the floor of each band in RANK_LADDER (api/src/utils/rank.utils.ts).
+  // If the ladder moves, these move with it — otherwise "Silver Rank" unlocks
+  // while the player is still shown as Bronze.
   {
     key: 'rating_silver',
     name: 'Silver Rank',
-    description: 'Reach Silver rank (300 HuePoints)',
+    description: 'Reach Silver rank (1,000 HuePoints)',
     category: 'elo',
     icon: '🥈',
     requirement_type: 'rating_gt',
-    requirement_value: 300,
+    requirement_value: 1000,
     requirement_metadata: null,
   },
   {
     key: 'rating_gold',
     name: 'Gold Rank',
-    description: 'Reach Gold rank (700 HuePoints)',
+    description: 'Reach Gold rank (2,500 HuePoints)',
     category: 'elo',
     icon: '🥇',
     requirement_type: 'rating_gt',
-    requirement_value: 700,
+    requirement_value: 2500,
     requirement_metadata: null,
   },
   {
     key: 'rating_platinum',
     name: 'Platinum Rank',
-    description: 'Reach Platinum rank (1400 HuePoints)',
+    description: 'Reach Platinum rank (6,000 HuePoints)',
     category: 'elo',
     icon: '💠',
     requirement_type: 'rating_gt',
-    requirement_value: 1400,
+    requirement_value: 6000,
     requirement_metadata: null,
   },
   {
     key: 'rating_diamond',
     name: 'Diamond Rank',
-    description: 'Reach Diamond rank (2500 HuePoints)',
+    description: 'Reach Diamond rank (13,000 HuePoints)',
     category: 'elo',
     icon: '💎',
     requirement_type: 'rating_gt',
-    requirement_value: 2500,
+    requirement_value: 13000,
     requirement_metadata: null,
   },
   

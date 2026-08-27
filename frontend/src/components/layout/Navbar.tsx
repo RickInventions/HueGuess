@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Palette, User, ShieldCheck, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { FriendsLauncher } from '../multiplayer/FriendsModal'
 import { Button } from '../ui/Button'
 
 export function Navbar() {
@@ -29,6 +30,10 @@ export function Navbar() {
                 </Link>
               )}
               
+              {/* Reachable from every page, so an incoming friend request can be
+                  answered without first joining a room. */}
+              <FriendsLauncher />
+
               <Link to="/profile">
                 <Button variant="ghost" icon={<User className="w-4 h-4" />}>
                   <span className="hidden sm:inline">{user.username}</span>

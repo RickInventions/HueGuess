@@ -14,6 +14,9 @@ interface RoomSetupProps {
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'extreme']
 
+/** Room capacity choices. Must stay inside the server's MIN/MAX_PLAYERS bounds. */
+const PLAYER_COUNTS = [2, 3, 4, 5, 6, 7, 8]
+
 export function RoomSetup({ onCreate, loading, disabled }: RoomSetupProps) {
   const [roundTimeSeconds, setRoundTimeSeconds] = useState(20)
   const [colorTimeSeconds, setColorTimeSeconds] = useState(3)
@@ -70,21 +73,23 @@ export function RoomSetup({ onCreate, loading, disabled }: RoomSetupProps) {
         <div className="flex items-center gap-2 text-sm text-muted">
           <Users className="w-4 h-4" />
           <span>Max Players</span>
+          <span className="ml-auto text-sm font-mono font-medium text-deep">{maxPlayers}</span>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          {[2, 3, 4].map((count) => (
+        <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+          {PLAYER_COUNTS.map((count) => (
             <button
               key={count}
               type="button"
               aria-pressed={maxPlayers === count}
+              aria-label={`${count} players`}
               onClick={() => setMaxPlayers(count)}
-              className={`px-2 py-2 text-xs rounded-button transition-all ${
+              className={`px-2 py-2 text-xs font-mono rounded-button transition-all ${
                 maxPlayers === count
                   ? 'bg-primary text-white shadow-glow-primary'
                   : 'bg-surface-alt text-muted hover:text-deep'
               }`}
             >
-              {count} players
+              {count}
             </button>
           ))}
         </div>

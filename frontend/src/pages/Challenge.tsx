@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Copy, Check, LogOut, AlertTriangle, Share2, Users } from 'lucide-react'
+import { ArrowLeft, Copy, Check, AlertTriangle, Share2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useMultiplayer } from '../hooks/useMultiplayer'
 import { soundService } from '../services/soundService'
@@ -10,6 +10,8 @@ import { JoinForm } from '../components/multiplayer/JoinForm'
 import { PlayerList } from '../components/multiplayer/PlayerList'
 import { ChatPanel } from '../components/multiplayer/ChatPanel'
 import { ConnectionBanner } from '../components/multiplayer/ConnectionBanner'
+import { RoomTopBar } from '../components/multiplayer/RoomTopBar'
+import { FriendsLauncher } from '../components/multiplayer/FriendsModal'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import type { RoomConfig } from '../types/multiplayer'
@@ -31,6 +33,8 @@ export default function Challenge() {
     leaveRoom,
     setReady,
     sendMessage,
+    sendTyping,
+    typingUsers,
     isCreating,
     isJoining,
     isConnected,
@@ -163,7 +167,19 @@ export default function Challenge() {
       onSend={sendMessage}
       canSend={canAct}
       currentUserId={user?.id}
+      typingUsers={typingUsers}
+      onTyping={sendTyping}
     />
+  )
+
+  const backLink = (
+    <button
+      onClick={handleBack}
+      className="flex items-center gap-1 text-muted hover:text-deep transition-colors cursor-pointer"
+    >
+      <ArrowLeft className="w-4 h-4" />
+      <span className="text-sm">Back</span>
+    </button>
   )
 
   return (
@@ -172,21 +188,25 @@ export default function Challenge() {
         view === 'waiting' ? 'max-w-game lg:max-w-4xl' : 'max-w-game'
       }`}
     >
-      <div className="flex items-center justify-between gap-3">
-        <button
-          onClick={handleBack}
-          className="flex items-center gap-1 text-muted hover:text-deep transition-colors"
+      {/* In a room, leaving is an icon up here rather than a button stacked under
+          Ready. Outside one there is nothing to leave, so it's just the back link
+          plus a way into friend management. */}
+      {currentRoom ? (
+        <RoomTopBar
+          playerCount={connectedPlayers.length}
+          maxPlayers={currentRoom.config.maxPlayers}
+          onLeave={handleLeave}
+          leaveTitle="Leave this room?"
+          leaveMessage="You will drop out of this room. You can rejoin with the code while it is still open."
         >
-          <ArrowLeft className="w-4 h-4" />
-          <span className="text-sm">Back</span>
-        </button>
-        {currentRoom && (
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted">
-            <Users className="w-3.5 h-3.5" />
-            {connectedPlayers.length}/{currentRoom.config.maxPlayers}
-          </span>
-        )}
-      </div>
+          {backLink}
+        </RoomTopBar>
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          {backLink}
+          <FriendsLauncher />
+        </div>
+      )}
 
       <ConnectionBanner
         isOnline={isOnline}
@@ -273,6 +293,7 @@ export default function Challenge() {
                 hostSocketId={currentRoom.hostSocketId}
                 maxPlayers={currentRoom.config.maxPlayers}
                 currentUserId={user.id}
+                allowFriendRequests
               />
 
               {showCountdown ? (
@@ -294,20 +315,15 @@ export default function Challenge() {
                     <p className="text-center text-xs text-muted">Waiting for all players to ready up…</p>
                   )}
 
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <Button
-                      fullWidth
-                      variant={isReady ? 'secondary' : 'primary'}
-                      onClick={handleToggleReady}
-                      disabled={!canAct}
-                      icon={isReady ? <Check className="w-4 h-4" /> : undefined}
-                    >
-                      {isReady ? 'Unready' : 'Ready'}
-                    </Button>
-                    <Button variant="ghost" onClick={handleLeave} icon={<LogOut className="w-4 h-4" />}>
-                      Leave
-                    </Button>
-                  </div>
+                  <Button
+                    fullWidth
+                    variant={isReady ? 'secondary' : 'primary'}
+                    onClick={handleToggleReady}
+                    disabled={!canAct}
+                    icon={isReady ? <Check className="w-4 h-4" /> : undefined}
+                  >
+                    {isReady ? 'Unready' : 'Ready'}
+                  </Button>
 
                   {connectedPlayers.length >= 2 && (
                     <p className="text-center text-xs text-muted">

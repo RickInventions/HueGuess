@@ -319,7 +319,7 @@ export default function Game() {
                     </button>
                     <button
                       onClick={handleGoHome}
-                      className="w-full sm:flex-1 bg-surface-alt text-deep py-3 sm:py-4 rounded-xl font-semibold hover:bg-surface-alt/80 active:scale-[0.98] transition-all text-sm sm:text-base touch-manipulation"
+                      className="w-full sm:flex-1 bg-surface-alt text-deep py-3 sm:py-4 rounded-xl font-semibold hover:bg-surface-alt/80 active:scale-[0.98] transition-all text-sm  touch-manipulation"
                     >
                       <Home className="w-4 h-4 inline mr-2" />
                       Home

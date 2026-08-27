@@ -205,7 +205,7 @@ export default function VerifyEmail() {
               onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
               required
               maxLength={6}
-              className="w-full px-4 py-3 rounded-button bg-surface-alt border border-border text-deep text-center text-2xl tracking-[0.5em] font-mono placeholder:text-muted/40 focus:outline-none focus:shadow-glow-primary transition-shadow"
+              className="w-full px-4 py-3 rounded-button bg-surface-alt border border-border text-deep text-center text-2xl tracking-[0.5em] font-mono placeholder:text-muted focus:outline-none focus:shadow-glow-primary transition-shadow"
             />
 
             <Button type="submit" fullWidth loading={loading}>

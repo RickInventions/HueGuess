@@ -2,6 +2,8 @@ import pool from '../config/db.js';
 import bcrypt from 'bcrypt';
 import { CompetitiveService } from './competitive.service.js';
 import { AchievementService } from './achievement.service.js';
+import { getRankTier, STARTING_RATING } from '../utils/rank.utils.js';
+import { isUserOnline } from '../socket/presence.js';
 
 export class UserService {
   
@@ -29,8 +31,8 @@ export class UserService {
     );
     
     const stats = statsResult.rows[0] || {
-      rating: 100,
-      rank_tier: 'Bronze',
+      rating: STARTING_RATING,
+      rank_tier: getRankTier(STARTING_RATING),
       games_played: 0,
       avg_accuracy: 0,
       best_streak: 0,
@@ -56,8 +58,12 @@ export class UserService {
     
     return {
       user: {
+        // The id is what the friend actions key off — without it the viewer can
+        // see whose profile this is but has no way to act on it.
+        id: user.id,
         username: user.username,
         joinedDate: user.created_at,
+        isOnline: isUserOnline(user.id),
       },
       stats: {
         rating: stats.rating,

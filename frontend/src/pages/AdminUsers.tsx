@@ -235,7 +235,7 @@ const endItem = Math.min(offset + limit, total);
               {selectedUser.rank_tier && (
                 <div className="flex justify-between py-2 border-b border-border">
                   <span className="text-muted">Rank</span>
-                  <span className="capitalize">{selectedUser.rank_tier}</span>
+                  <span>{selectedUser.rank_tier}</span>
                 </div>
               )}
               <div className="flex justify-between py-2 border-b border-border">

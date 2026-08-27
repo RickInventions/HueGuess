@@ -1,33 +1,8 @@
 import pool from '../config/db.js';
 import { Difficulty, DIFFICULTY_CONFIGS } from '../types/game.types.js';
 import { AchievementService } from './achievement.service.js';
+import { getRankTier, getRankProgress, STARTING_RATING } from '../utils/rank.utils.js';
 
-const RANK_THRESHOLDS = {
-  bronze: 0,
-  silver: 300,
-  gold: 700,
-  platinum: 1400,
-  diamond: 2500,
-};
-
-function getRankTier(rating: number): string {
-  if (rating < 300) return 'Bronze';
-  if (rating < 700) return 'Silver';
-  if (rating < 1400) return 'Gold';
-  if (rating < 2500) return 'Platinum';
-  return 'Diamond';
-}
-
-function getRankProgress(rating: number) {
-  let current = 0, next = 300, tier = 'Bronze', nextTier = 'Silver';
-  if (rating < 300) { current = 0; next = 300; tier = 'Bronze'; nextTier = 'Silver'; }
-  else if (rating < 700) { current = 300; next = 700; tier = 'Silver'; nextTier = 'Gold'; }
-  else if (rating < 1400) { current = 700; next = 1400; tier = 'Gold'; nextTier = 'Platinum'; }
-  else if (rating < 2500) { current = 1400; next = 2500; tier = 'Platinum'; nextTier = 'Diamond'; }
-  else { current = 2500; next = 2500; tier = 'Diamond'; nextTier = 'Max'; }
-  const progress = next > current ? ((rating - current) / (next - current)) * 100 : 100;
-  return { currentTier: tier, nextTier, progress: Math.min(100, Math.max(0, progress)), needed: Math.max(0, next - rating) };
-}
 const DIFFICULTY_PARAMS = {
   easy: {
     threshold: 65,
@@ -77,13 +52,17 @@ export class CompetitiveService {
   static async initializeUserStats(userId: string) {
     const exists = await pool.query('SELECT 1 FROM competitive_stats WHERE user_id = $1', [userId]);
     if (exists.rowCount === 0) {
-      await pool.query(`INSERT INTO competitive_stats (user_id, rating, rank_tier) VALUES ($1, $2, $3)`, [userId, 100, 'Bronze']);
+      await pool.query(`INSERT INTO competitive_stats (user_id, rating, rank_tier) VALUES ($1, $2, $3)`, [
+        userId,
+        STARTING_RATING,
+        getRankTier(STARTING_RATING),
+      ]);
     }
   }
 
   static async updateAfterGame(userId: string, roundId: string, accuracy: number, difficulty: Difficulty) {
     const stats = await pool.query(`SELECT rating, current_streak, best_streak, games_played, total_accuracy FROM competitive_stats WHERE user_id = $1`, [userId]);
-    let oldRating = 100, streak = 0, bestStreak = 0, games = 0, totalAcc = 0;
+    let oldRating = STARTING_RATING, streak = 0, bestStreak = 0, games = 0, totalAcc = 0;
     if (stats.rows.length) {
       oldRating = stats.rows[0].rating;
       streak = stats.rows[0].current_streak || 0;

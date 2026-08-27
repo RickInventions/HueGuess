@@ -17,6 +17,8 @@ import {
 } from './types.js';
 import { Difficulty } from '../types/game.types.js';
 import { HSLColor } from '../types/game.types.js';
+import { FriendService } from '../services/friend.service.js';
+import { notifyUser } from './presence.js';
 
 // ── Timers ──────────────────────────────────────────────────────────────────
 // Every scheduled transition is tracked so it can be cancelled when the room's
@@ -36,6 +38,17 @@ const graceTimers: Map<string, { warning: NodeJS.Timeout; removal: NodeJS.Timeou
 /** Submissions arriving this late after the deadline are still honoured. */
 const SUBMIT_GRACE_MS = 750;
 const MAX_CHAT_LENGTH = 200;
+
+/** Room capacity bounds. Keep in sync with the frontend room setup control. */
+const MIN_PLAYERS = 2;
+const MAX_PLAYERS = 8;
+
+/**
+ * How long a `typing` signal stands before the client should drop it. The client
+ * refreshes while the person keeps typing, so this only has to outlast the gap
+ * between two keystrokes.
+ */
+const TYPING_TTL_MS = 4_000;
 
 function getTimers(roomCode: string): RoomTimers {
   let timers = roomTimers.get(roomCode);
@@ -113,8 +126,8 @@ function parseConfig(input: Partial<RoomConfig> | undefined): RoomConfig {
   if (!DIFFICULTIES.includes(difficulty)) {
     throw new Error('Invalid difficulty');
   }
-  if (!Number.isFinite(maxPlayers) || maxPlayers < 2 || maxPlayers > 4) {
-    throw new Error('Max players must be between 2 and 4');
+  if (!Number.isFinite(maxPlayers) || maxPlayers < MIN_PLAYERS || maxPlayers > MAX_PLAYERS) {
+    throw new Error(`Max players must be between ${MIN_PLAYERS} and ${MAX_PLAYERS}`);
   }
   if (specificRounds !== null && (!Number.isFinite(specificRounds) || specificRounds < 1 || specificRounds > 50)) {
     throw new Error('Specific rounds must be between 1 and 50');
@@ -829,6 +842,104 @@ export function setupSocketHandlers(io: Server, socket: Socket) {
 
     roomManager.addChatMessage(room, payload);
     io.to(room.code).emit('new_message', payload);
+
+    // A sent message ends the typing state immediately — waiting for the TTL
+    // would leave "X is typing…" hanging under the message they just sent.
+    socket.to(room.code).emit('user_typing', {
+      socketId: socket.id,
+      userId: player.userId,
+      username: player.username,
+      isTyping: false,
+    });
+  });
+
+  // ── Typing indicator ──────────────────────────────────────────────────────
+  // Fire-and-forget: broadcast to everyone else in the room and let their clients
+  // expire it. Deliberately not stored on the room — nothing needs to survive a
+  // reconnect, and a stale flag would be worse than a missing one.
+  on<{ isTyping?: unknown }>('typing', data => {
+    const room = roomManager.getRoomBySocketId(socket.id);
+    if (!room) return;
+
+    const player = room.players.get(socket.id);
+    if (!player) return;
+
+    // Generous limit: the client already throttles to one signal per few seconds,
+    // so this only catches a client that is misbehaving.
+    if (!allow(socket, 'typing', 12, 5_000)) return;
+
+    socket.to(room.code).emit('user_typing', {
+      socketId: socket.id,
+      userId: player.userId,
+      username: player.username,
+      isTyping: data?.isTyping !== false,
+      expiresAt: Date.now() + TYPING_TTL_MS,
+    });
+  });
+
+  // ── Room invites ──────────────────────────────────────────────────────────
+  // Sent through the socket rather than REST because it is only ever meaningful
+  // while the sender is sitting in a room, and only to someone online.
+  on<{ userId?: unknown }>('invite_to_room', data => {
+    const targetId = typeof data?.userId === 'string' ? data.userId : '';
+    if (!targetId) return;
+
+    const me = socket.data.user as SocketUser;
+    if (targetId === me.userId) return;
+
+    if (!allow(socket, 'invite', 6, 30_000)) {
+      emitError(socket, 'You are sending invites too quickly', 'RATE_LIMITED');
+      return;
+    }
+
+    const room = roomManager.getRoomBySocketId(socket.id);
+    if (!room) {
+      emitError(socket, 'You are not in a room', 'NOT_IN_ROOM');
+      return;
+    }
+
+    const player = room.players.get(socket.id);
+    if (!player) return;
+
+    if (room.players.size >= room.config.maxPlayers) {
+      emitError(socket, 'Room is full', 'ROOM_FULL');
+      return;
+    }
+
+    // Already here — no point pinging them.
+    for (const existing of room.players.values()) {
+      if (existing.userId === targetId) {
+        emitError(socket, `${existing.username} is already in this room`, 'ALREADY_IN_ROOM');
+        return;
+      }
+    }
+
+    // Friends only, checked server-side: the client hides the button for
+    // non-friends, but the event itself must not be a way to spam strangers.
+    void FriendService.areFriends(me.userId, targetId)
+      .then(friends => {
+        if (!friends) {
+          emitError(socket, 'You can only invite friends', 'NOT_FRIENDS');
+          return;
+        }
+
+        const delivered = notifyUser(targetId, 'room_invite', {
+          code: room.code,
+          fromUserId: me.userId,
+          fromUsername: player.username,
+          difficulty: room.config.difficulty,
+          playerCount: room.players.size,
+          maxPlayers: room.config.maxPlayers,
+          inProgress: room.phase !== 'waiting' && room.phase !== 'ended',
+          sentAt: Date.now(),
+        });
+
+        socket.emit('invite_sent', { userId: targetId, delivered });
+      })
+      .catch(error => {
+        console.error('Invite check failed:', error);
+        emitError(socket, 'Could not send invite', 'INVITE_FAILED');
+      });
   });
 
   // ── Disconnect ────────────────────────────────────────────────────────────

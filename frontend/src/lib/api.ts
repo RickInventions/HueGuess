@@ -1,5 +1,10 @@
 import axios from 'axios';
 import type { Difficulty, GameRoundResponse, GameMode, HSLColor, SubmitGuessResponse, CompetitiveStats } from '../types';
+import type {
+  FriendOverviewResponse,
+  FriendRelationship,
+  FriendSearchResult,
+} from '../types/friends';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
@@ -147,6 +152,26 @@ export const user = {
     api.put('/user/password', { currentPassword, newPassword }),
   searchUsers: (query: string, limit?: number) =>
     api.get('/user/search', { params: { q: query, limit } }),
+};
+
+// Friend endpoints
+export const friends = {
+  /** Friends + pending requests in both directions, with live online flags. */
+  list: () => api.get<FriendOverviewResponse>('/friends'),
+  search: (query: string) =>
+    api.get<{ success: boolean; results: FriendSearchResult[] }>('/friends/search', {
+      params: { q: query },
+    }),
+  status: (userId: string) =>
+    api.get<{ success: boolean; relationship: FriendRelationship }>(`/friends/status/${userId}`),
+  /** Resolves with status 'accepted' when this crossed an incoming request. */
+  request: (userId: string) =>
+    api.post<{ success: boolean; status: 'pending' | 'accepted' }>('/friends/request', { userId }),
+  accept: (userId: string) => api.post('/friends/accept', { userId }),
+  decline: (userId: string) => api.post('/friends/decline', { userId }),
+  /** Withdraw a request you sent. */
+  cancel: (userId: string) => api.post('/friends/cancel', { userId }),
+  remove: (userId: string) => api.delete(`/friends/${userId}`),
 };
 
 // Feedback endpoints
