@@ -22,6 +22,18 @@ export function setPresenceServer(server: SocketServer): void {
   io = server;
 }
 
+/**
+ * The live Socket.IO server, or null before the socket layer has booted.
+ *
+ * `notifyUser` covers pushing to one account, but a REST route that needs to
+ * broadcast into a game room (the voice-note upload) has no other way to reach
+ * it. Nullable on purpose: the routes are mounted before the socket server is
+ * attached, so a caller during that window must handle its absence.
+ */
+export function getSocketServer(): SocketServer | null {
+  return io;
+}
+
 export function userRoom(userId: string): string {
   return `user:${userId}`;
 }

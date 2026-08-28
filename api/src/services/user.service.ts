@@ -75,6 +75,7 @@ export class UserService {
       achievements: {
         unlocked: unlockedAchievements.rows,
         totalUnlocked: parseInt(totalAchievements.rows[0].count),
+        showcase: await AchievementService.getShowcase(user.id),
       },
     };
   }
@@ -159,7 +160,10 @@ export class UserService {
         unlocked: achievements.unlocked,
         locked: achievements.locked,
         totalUnlocked: achievements.unlocked.length,
-        totalPossible: 17,
+        // Read from the catalogue rather than hardcoded — this was `17` while the
+        // catalogue held 18, and is now 100.
+        totalPossible: achievementStats.totalPossible,
+        showcase: await AchievementService.getShowcase(user.id),
         stats: achievementStats,
       },
       gamesByDifficulty: gamesByDifficulty.rows,
@@ -212,6 +216,7 @@ export class UserService {
     
     // Get achievements (unlocked only for public profile)
     const achievements = await AchievementService.getUserAchievements(user.id);
+    const publicStats = await AchievementService.getAchievementStats(user.id);
     
     // Get recent games (last 10)
     const recentGames = await pool.query(
@@ -263,8 +268,9 @@ export class UserService {
       achievements: {
         unlocked: achievements.unlocked,
         totalUnlocked: achievements.unlocked.length,
-        totalPossible: 17,
-        stats: await AchievementService.getAchievementStats(user.id),
+        totalPossible: publicStats.totalPossible,
+        showcase: await AchievementService.getShowcase(user.id),
+        stats: publicStats,
       },
       gamesByDifficulty: gamesByDifficulty.rows,
       recentGames: recentGames.rows.map((game: any) => ({

@@ -171,6 +171,8 @@ export default function Challenge() {
       currentUserId={user?.id}
       typingUsers={typingUsers}
       onTyping={sendTyping}
+      roomCode={currentRoom?.code}
+      phase={phase}
     />
   )
 

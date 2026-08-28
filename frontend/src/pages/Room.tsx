@@ -247,6 +247,8 @@ export default function Room() {
       currentUserId={user?.id}
       typingUsers={typingUsers}
       onTyping={sendTyping}
+      roomCode={currentRoom?.code}
+      phase={phase}
     />
   )
 
@@ -619,6 +621,8 @@ export default function Room() {
             currentUserId={user?.id}
             typingUsers={typingUsers}
             onTyping={sendTyping}
+            roomCode={currentRoom?.code}
+            phase={phase}
             compact
           />
         </div>

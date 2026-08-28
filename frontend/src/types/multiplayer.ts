@@ -74,6 +74,11 @@ export interface ChatMessage {
   userId?: string;
   socketId?: string;
   replyTo?: ChatReplyTo;
+  /** A voice note. Stamped by the server on upload; never sent by a client. */
+  voice?: {
+    url: string;
+    durationMs: number;
+  };
 }
 
 /**

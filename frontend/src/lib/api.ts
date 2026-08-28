@@ -132,6 +132,23 @@ export const achievements = {
   getRecent: () => api.get('/achievements/recent/unseen'),
   /** Called when the Achievements page is opened, which is what clears the panel. */
   markAllSeen: () => api.post('/achievements/mark-all-seen'),
+  getShowcase: () => api.get('/achievements/showcase'),
+  /** Up to three keys, in the order they should appear on the profile. */
+  setShowcase: (keys: string[]) => api.put('/achievements/showcase', { keys }),
+};
+
+export const voice = {
+  /**
+   * Uploads a recording; the server broadcasts the chat message itself.
+   *
+   * The blob goes up as a raw body rather than multipart — there is exactly one
+   * field, and `express.raw` scoped to audio content types is a much smaller
+   * surface than a file-upload middleware.
+   */
+  send: (blob: Blob, roomCode: string, durationMs: number) =>
+    api.post(`/voice?room=${encodeURIComponent(roomCode)}&ms=${Math.round(durationMs)}`, blob, {
+      headers: { 'Content-Type': blob.type || 'audio/webm' },
+    }),
 };
 
 // Daily challenge endpoints

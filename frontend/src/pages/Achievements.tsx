@@ -1,28 +1,214 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Medal, Lock } from 'lucide-react'
-import { achievements } from '../lib/api'
+import { Check, Lock, Pin, Search, Sparkles, X } from 'lucide-react'
+import { achievements as achievementsApi } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { Card } from '../components/ui/Card'
 import { ProgressBar } from '../components/ui/ProgressBar'
 
+/**
+ * The achievements page.
+ *
+ * At 100 achievements a single flat list is unusable — most of it is locked cards
+ * you have to scroll past to reach anything. So: category tabs, a search box, and
+ * an all/unlocked/locked filter, all applied to one list rather than the previous
+ * two separate unlocked/locked sections. Cards keep their unlocked state visible
+ * through colour and a tier badge instead of position on the page.
+ */
+
+type Tier = 'bronze' | 'silver' | 'gold' | 'platinum'
+
+interface Achievement {
+  key: string
+  name: string
+  description: string
+  category: string
+  icon: string
+  tier: Tier
+  points: number
+  requirement_value: number
+  progress_current?: number
+  progress_target?: number
+  unlocked_at?: string
+}
+
+interface Stats {
+  total: number
+  totalPossible: number
+  points: number
+  totalPoints: number
+  byCategory: Record<string, number>
+}
+
+/**
+ * Tier styling.
+ *
+ * Solid hex rather than theme tokens because these four are a distinct scale that
+ * has to read as bronze → platinum; mapping them onto the palette would collapse
+ * gold and the accent into the same orange.
+ */
+const TIERS: Record<Tier, { label: string; text: string; bg: string; border: string; bar: string }> =
+  {
+    bronze: {
+      label: 'Bronze',
+      text: 'text-[#8A5A2B]',
+      bg: 'bg-[#8A5A2B]/10',
+      border: 'border-l-[#8A5A2B]',
+      bar: '#8A5A2B',
+    },
+    silver: {
+      label: 'Silver',
+      text: 'text-[#6B7280]',
+      bg: 'bg-[#6B7280]/10',
+      border: 'border-l-[#6B7280]',
+      bar: '#6B7280',
+    },
+    gold: {
+      label: 'Gold',
+      text: 'text-[#A16207]',
+      bg: 'bg-[#A16207]/10',
+      border: 'border-l-[#D4A017]',
+      bar: '#D4A017',
+    },
+    platinum: {
+      label: 'Platinum',
+      text: 'text-primary',
+      bg: 'bg-primary/10',
+      border: 'border-l-primary',
+      bar: '#5E60FF',
+    },
+  }
+
+/** Display names for the seed's category slugs, in tab order. */
+const CATEGORIES: { key: string; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'accuracy', label: 'Accuracy' },
+  { key: 'games', label: 'Volume' },
+  { key: 'streak', label: 'Streaks' },
+  { key: 'elo', label: 'Rank' },
+  { key: 'modes', label: 'Difficulty' },
+  { key: 'speed', label: 'Speed' },
+  { key: 'daily', label: 'Daily' },
+  { key: 'social', label: 'Social' },
+  { key: 'meta', label: 'Meta' },
+]
+
+const STATUSES = [
+  { key: 'all', label: 'All' },
+  { key: 'unlocked', label: 'Unlocked' },
+  { key: 'locked', label: 'Locked' },
+] as const
+
+const MAX_SHOWCASE = 3
+
+function AchievementCard({
+  ach,
+  isUnlocked,
+  pinned,
+  onTogglePin,
+}: {
+  ach: Achievement
+  isUnlocked: boolean
+  pinned: boolean
+  onTogglePin?: () => void
+}) {
+  const tier = TIERS[ach.tier] ?? TIERS.bronze
+  const target = ach.progress_target ?? ach.requirement_value
+  const current = ach.progress_current ?? 0
+
+  return (
+    <Card
+      className={`p-4 border-l-4 ${
+        isUnlocked ? `${tier.border} ${tier.bg}` : 'border-l-border'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="relative text-3xl leading-none">
+          <span className={isUnlocked ? '' : 'grayscale opacity-60'}>{ach.icon}</span>
+          {/* A lock badge rather than fading the whole card. Reduced opacity on
+              this palette lands around 2.3:1, which is unreadable. */}
+          {!isUnlocked && (
+            <span className="absolute -bottom-1 -right-1 rounded-full bg-surface-muted p-0.5">
+              <Lock className="h-2.5 w-2.5 text-muted" />
+            </span>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="font-heading text-sm font-semibold leading-snug">{ach.name}</h3>
+            {isUnlocked && onTogglePin && (
+              <button
+                type="button"
+                onClick={onTogglePin}
+                aria-label={pinned ? `Unpin ${ach.name}` : `Pin ${ach.name} to your profile`}
+                title={pinned ? 'Unpin from profile' : 'Pin to profile'}
+                className={`shrink-0 rounded-button p-1 transition-colors cursor-pointer ${
+                  pinned
+                    ? 'bg-primary text-white'
+                    : 'text-muted hover:bg-surface-muted hover:text-deep'
+                }`}
+              >
+                <Pin className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
+          <p className="mt-0.5 text-xs text-muted">{ach.description}</p>
+
+          <div className="mt-2 flex items-center gap-2">
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${tier.bg} ${tier.text}`}
+            >
+              {tier.label}
+            </span>
+            <span className="font-mono text-[10px] text-muted">{ach.points} pts</span>
+            {isUnlocked && (
+              <span className="ml-auto flex items-center gap-1 text-[10px] font-medium text-success">
+                <Check className="h-3 w-3" />
+                Unlocked
+              </span>
+            )}
+          </div>
+
+          {!isUnlocked && target > 0 && (
+            <div className="mt-2">
+              <ProgressBar value={(current / target) * 100} height={4} color={tier.bar} />
+              <p className="mt-1 font-mono text-[10px] text-muted">
+                {current.toLocaleString()} / {target.toLocaleString()}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
 export default function Achievements() {
   const { user } = useAuth()
-  const [unlocked, setUnlocked] = useState<any[]>([])
-  const [locked, setLocked] = useState<any[]>([])
-  const [stats, setStats] = useState<any>(null)
+  const [unlocked, setUnlocked] = useState<Achievement[]>([])
+  const [locked, setLocked] = useState<Achievement[]>([])
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [showcase, setShowcase] = useState<string[]>([])
+  const [showcaseError, setShowcaseError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const [category, setCategory] = useState('all')
+  const [status, setStatus] = useState<(typeof STATUSES)[number]['key']>('all')
+  const [query, setQuery] = useState('')
+
   useEffect(() => {
-    const loadAchievements = async () => {
+    const load = async () => {
       if (!user) {
-        // For non-authenticated, just show all achievements as locked
+        // Signed out: the catalogue is still worth browsing, just with nothing
+        // unlocked and no progress to show.
         try {
-          const res = await achievements.getAll()
-          const all = res.data.achievements
-          setLocked(all.map((a: any) => ({ ...a, progress_current: 0, progress_target: a.requirement_value })))
+          const res = await achievementsApi.getAll()
+          const all: Achievement[] = res.data.achievements
+          setLocked(all.map(a => ({ ...a, progress_current: 0, progress_target: a.requirement_value })))
           setUnlocked([])
-          setStats({ total: 0, totalPossible: all.length })
+          setStats(null)
         } catch (error) {
           console.error(error)
         } finally {
@@ -32,108 +218,210 @@ export default function Achievements() {
       }
 
       try {
-        const res = await achievements.getMine()
-        setUnlocked(res.data.unlocked)
-        setLocked(res.data.locked)
-        setStats(res.data.stats)
+        const res = await achievementsApi.getMine()
+        setUnlocked(res.data.unlocked ?? [])
+        setLocked(res.data.locked ?? [])
+        setStats(res.data.stats ?? null)
+        setShowcase((res.data.showcase ?? []).map((a: Achievement) => a.key))
         // Opening this page is the acknowledgement — clears the "new" panel on Home.
         // Fire and forget: a failure here must not break the list that just loaded.
-        achievements.markAllSeen().catch(() => {})
+        achievementsApi.markAllSeen().catch(() => {})
       } catch (error) {
         console.error('Failed to load achievements:', error)
       } finally {
         setLoading(false)
       }
     }
-    loadAchievements()
+    load()
   }, [user])
 
+  const unlockedKeys = useMemo(() => new Set(unlocked.map(a => a.key)), [unlocked])
+
+  /**
+   * One list, ordered unlocked-first.
+   *
+   * The server already returns each group in catalogue order, so concatenating
+   * keeps tiers ascending inside each half without a second sort.
+   */
+  const visible = useMemo(() => {
+    const all = [...unlocked, ...locked]
+    const needle = query.trim().toLowerCase()
+
+    return all.filter(a => {
+      if (category !== 'all' && a.category !== category) return false
+      if (status === 'unlocked' && !unlockedKeys.has(a.key)) return false
+      if (status === 'locked' && unlockedKeys.has(a.key)) return false
+      if (needle && !`${a.name} ${a.description}`.toLowerCase().includes(needle)) return false
+      return true
+    })
+  }, [unlocked, locked, category, status, query, unlockedKeys])
+
+  /** Counts per tab, so a tab that would be empty says so before you tap it. */
+  const counts = useMemo(() => {
+    const all = [...unlocked, ...locked]
+    const map: Record<string, number> = { all: all.length }
+    for (const a of all) map[a.category] = (map[a.category] ?? 0) + 1
+    return map
+  }, [unlocked, locked])
+
+  const togglePin = async (key: string) => {
+    const next = showcase.includes(key)
+      ? showcase.filter(k => k !== key)
+      : [...showcase, key].slice(0, MAX_SHOWCASE)
+
+    if (!showcase.includes(key) && showcase.length >= MAX_SHOWCASE) {
+      setShowcaseError(`You can pin ${MAX_SHOWCASE} — unpin one first.`)
+      return
+    }
+
+    // Optimistic, with a rollback: pinning is a one-tap action and waiting for a
+    // round trip before the pin fills in makes it feel broken.
+    const previous = showcase
+    setShowcase(next)
+    setShowcaseError(null)
+    try {
+      await achievementsApi.setShowcase(next)
+    } catch {
+      setShowcase(previous)
+      setShowcaseError('Could not save your showcase.')
+    }
+  }
+
+  const pointsPercent = stats?.totalPoints ? (stats.points / stats.totalPoints) * 100 : 0
+
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="mx-auto max-w-5xl px-4 py-8">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="text-center mb-8"
+        className="mb-6 text-center"
       >
-        <h1 className="font-heading text-4xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+        <h1 className="bg-gradient-to-r from-primary to-accent bg-clip-text font-heading text-4xl font-bold text-transparent">
           Achievements
         </h1>
-        {user && stats && (
-          <p className="text-muted mt-2">
-            {stats.total} / {stats.totalPossible} unlocked
-          </p>
+        {stats ? (
+          <div className="mx-auto mt-3 max-w-sm">
+            <p className="text-sm text-muted">
+              <span className="font-mono font-semibold text-deep">{stats.total}</span> of{' '}
+              {stats.totalPossible} unlocked ·{' '}
+              <span className="font-mono font-semibold text-deep">
+                {stats.points.toLocaleString()}
+              </span>{' '}
+              / {stats.totalPoints.toLocaleString()} pts
+            </p>
+            <ProgressBar value={pointsPercent} height={6} className="mt-2" />
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-muted">Sign in to track your progress.</p>
         )}
       </motion.div>
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
       ) : (
         <>
-          {/* Unlocked Achievements */}
-          {unlocked.length > 0 && (
-            <div className="mb-8">
-              <h2 className="font-heading font-semibold text-lg mb-4 flex items-center gap-2">
-                <Medal className="w-5 h-5 text-success" />
-                Unlocked
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {unlocked.map((ach) => (
-                  <motion.div
-                    key={ach.key}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.2 }}
+          {user && (
+            <div className="mb-4 flex flex-col gap-2 rounded-card border border-border bg-surface-alt p-3 sm:flex-row sm:items-center">
+              <p className="flex items-center gap-1.5 text-xs text-muted">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                Pin up to {MAX_SHOWCASE} to show on your profile
+                <span className="font-mono">
+                  ({showcase.length}/{MAX_SHOWCASE})
+                </span>
+              </p>
+              {showcaseError && (
+                <p className="flex items-center gap-1 text-xs text-accent sm:ml-auto">
+                  {showcaseError}
+                  <button
+                    type="button"
+                    onClick={() => setShowcaseError(null)}
+                    aria-label="Dismiss"
+                    className="rounded-button p-0.5 hover:bg-surface-muted cursor-pointer"
                   >
-                    <Card className="p-4 border-l-4 border-l-success bg-success/5">
-                      <div className="flex items-start gap-3">
-                        <div className="text-3xl">{ach.icon}</div>
-                        <div className="flex-1">
-                          <h3 className="font-heading font-semibold">{ach.name}</h3>
-                          <p className="text-xs text-muted">{ach.description}</p>
-                          <p className="text-xs text-success mt-1">Unlocked</p>
-                        </div>
-                      </div>
-                    </Card>
-                  </motion.div>
-                ))}
-              </div>
+                    <X className="h-3 w-3" />
+                  </button>
+                </p>
+              )}
             </div>
           )}
 
-          {/* Locked Achievements */}
-          {locked.length > 0 && (
-            <div>
-              <h2 className="font-heading font-semibold text-lg mb-4 flex items-center gap-2">
-                <Lock className="w-5 h-5 text-muted" />
-                Locked
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {locked.map((ach) => (
-                  <Card key={ach.key} className="p-4 opacity-70">
-                    <div className="flex items-start gap-3">
-                      <div className="text-3xl filter grayscale">{ach.icon}</div>
-                      <div className="flex-1">
-                        <h3 className="font-heading font-semibold">{ach.name}</h3>
-                        <p className="text-xs text-muted">{ach.description}</p>
-                        {ach.progress_target && (
-                          <div className="mt-2">
-                            <ProgressBar
-                              value={(ach.progress_current / ach.progress_target) * 100}
-                              height={4}
-                              color="#9CA3AF"
-                            />
-                            <p className="text-xs text-muted mt-1">
-                              {ach.progress_current} / {ach.progress_target}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+          {/* Controls. The search field is text-base below sm so iOS Safari does
+              not zoom the page when it gets focus. */}
+          <div className="mb-4 flex flex-col gap-3">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <label className="relative flex-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                <input
+                  type="search"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Search achievements…"
+                  aria-label="Search achievements"
+                  className="w-full rounded-button border border-border bg-surface py-2 pl-9 pr-3 focus:outline-none focus:shadow-glow-primary sm:text-sm"
+                />
+              </label>
+
+              {user && (
+                <div className="flex shrink-0 gap-1 rounded-button bg-surface-alt p-1">
+                  {STATUSES.map(s => (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => setStatus(s.key)}
+                      className={`flex-1 rounded-button px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                        status === s.key
+                          ? 'bg-surface text-deep shadow-card'
+                          : 'text-muted hover:text-deep'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Horizontal scroll rather than wrapping: ten tabs wrapped to three
+                rows on a phone pushes the list itself below the fold. */}
+            <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1">
+              {CATEGORIES.filter(c => counts[c.key] > 0 || c.key === 'all').map(c => (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => setCategory(c.key)}
+                  className={`shrink-0 rounded-button px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                    category === c.key
+                      ? 'bg-primary text-white'
+                      : 'bg-surface-alt text-muted hover:bg-surface-muted hover:text-deep'
+                  }`}
+                >
+                  {c.label}
+                  <span className="ml-1.5 font-mono opacity-70">{counts[c.key] ?? 0}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {visible.length === 0 ? (
+            <Card className="py-10 text-center">
+              <p className="text-sm text-muted">Nothing matches that.</p>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {visible.map(ach => {
+                const isUnlocked = unlockedKeys.has(ach.key)
+                return (
+                  <AchievementCard
+                    key={ach.key}
+                    ach={ach}
+                    isUnlocked={isUnlocked}
+                    pinned={showcase.includes(ach.key)}
+                    onTogglePin={user && isUnlocked ? () => togglePin(ach.key) : undefined}
+                  />
+                )
+              })}
             </div>
           )}
         </>

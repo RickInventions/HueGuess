@@ -1,6 +1,8 @@
 import pool from '../config/db.js';
 import { HSLColor, DIFFICULTY_CONFIGS } from '../types/game.types.js';
 import { generateRandomColor, calculateAccuracy } from '../utils/hsl.utils.js';
+import { AchievementService } from './achievement.service.js';
+import type { Achievement } from './achievement.service.js';
 
 export class DailyChallengeService {
   
@@ -78,6 +80,7 @@ export class DailyChallengeService {
     accuracy: number;
     rank?: number;
     totalParticipants: number;
+    newlyUnlocked?: Achievement[];
   }> {
     // Check if user already submitted for this challenge
     const existingSubmission = await pool.query(
@@ -133,11 +136,18 @@ export class DailyChallengeService {
        WHERE challenge_id = $1`,
       [challengeId]
     );
-    
+
+    // Daily submissions never triggered an achievement check before this — the
+    // only caller of the achievement service was the competitive round handler —
+    // so all fourteen daily achievements were unreachable no matter how many
+    // dailies you played.
+    const newlyUnlocked = await AchievementService.syncAchievements(userId);
+
     return {
       accuracy,
       rank: parseInt(rankResult.rows[0].rank),
       totalParticipants: parseInt(totalResult.rows[0].total),
+      newlyUnlocked,
     };
   }
   

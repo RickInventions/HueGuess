@@ -31,6 +31,9 @@ import { getRankProgress, rankColor, rankIcon } from '../lib/constants'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 
+/** Tiles shown inline before the profile defers to the achievements page. */
+const MAX_UNLOCKED_TILES = 12
+
 /** One number in the stat strip. */
 function StatTile({
   icon,
@@ -319,6 +322,16 @@ export default function Profile() {
         b.progress_current / b.progress_target - a.progress_current / a.progress_target
     )
     .slice(0, 3)
+
+  // The pinned three, and the rest of the pile minus them — a showcased
+  // achievement appearing twice would read as a rendering bug.
+  const showcase: any[] = achievements?.showcase ?? []
+  const showcaseKeys = new Set(showcase.map((ach: any) => ach.key))
+  const otherUnlocked: any[] = (achievements?.unlocked ?? []).filter(
+    (ach: any) => !showcaseKeys.has(ach.key)
+  )
+  const restUnlocked = otherUnlocked.slice(0, MAX_UNLOCKED_TILES)
+  const hiddenCount = otherUnlocked.length - restUnlocked.length
 
   const inputClass =
     'w-full rounded-button border border-border bg-surface-alt px-4 py-3 text-base sm:text-sm text-deep placeholder:text-muted focus:outline-none focus:shadow-glow-primary'
@@ -617,8 +630,30 @@ export default function Profile() {
                 </span>
               </h3>
 
+              {/* Pinned first, at a size that reads as a choice rather than part
+                  of the pile. Chosen on the achievements page. */}
+              {showcase.length > 0 && (
+                <div className="mb-4 grid grid-cols-3 gap-2">
+                  {showcase.map((ach: any) => (
+                    <div
+                      key={ach.key}
+                      className="flex cursor-help flex-col items-center gap-1 rounded-xl border border-primary/25 bg-primary/5 p-3 text-center"
+                      title={`${ach.name}: ${ach.description}`}
+                    >
+                      <div className="text-3xl">{ach.icon}</div>
+                      <p className="max-w-full truncate text-[10px] font-semibold text-deep">
+                        {ach.name}
+                      </p>
+                      {ach.points ? (
+                        <p className="font-mono text-[9px] text-primary">{ach.points} pts</p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {achievements.unlocked.map((ach: any) => (
+                {restUnlocked.map((ach: any) => (
                   <div
                     key={ach.key}
                     className="flex cursor-help flex-col items-center gap-1 rounded-xl bg-surface-alt p-2.5 text-center transition-colors hover:bg-surface-muted"
@@ -631,6 +666,17 @@ export default function Profile() {
                   </div>
                 ))}
               </div>
+
+              {/* With a hundred achievements the full grid would be most of the
+                  page, so it stops at a screenful and points at the real list. */}
+              {hiddenCount > 0 && (
+                <Link
+                  to="/achievements"
+                  className="mt-3 inline-block text-xs font-medium text-primary hover:underline"
+                >
+                  View all {achievements.totalUnlocked} unlocked →
+                </Link>
+              )}
 
               {isOwnProfile && nextUp.length > 0 && (
                 <div className="mt-5 space-y-2.5 border-t border-border pt-4">

@@ -3,8 +3,9 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Coffee, Swords, ArrowRight, Trophy, User, Users, Calendar,
-  Search, Medal, TrendingUp, Crown
+  Search, Medal, TrendingUp, Crown, Lock
 } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { leaderboard, achievements, user as userApi } from '../lib/api'
 import { Card } from '../components/ui/Card'
@@ -32,21 +33,104 @@ interface RecentAchievement {
   unlocked_at: string
 }
 
+interface Mode {
+  key: string
+  name: string
+  blurb: string
+  /** Shown instead of `blurb` when nobody is signed in. */
+  signedOutBlurb?: string
+  Icon: LucideIcon
+  to: string
+  signedOutTo: string
+  /** Needs a verified email. */
+  gated: boolean
+  border: string
+  chip: string
+  tint: string
+}
+
+/**
+ * The four modes, as data rather than four near-identical JSX blocks.
+ *
+ * Tailwind classes are written out in full — the JIT compiler scans source text,
+ * so a class assembled from a variable would never make it into the stylesheet.
+ */
+const MODES: Mode[] = [
+  {
+    key: 'daily',
+    name: 'Daily Challenge',
+    blurb: 'One new color every day. Compete globally.',
+    signedOutBlurb: 'Sign in to play the daily color.',
+    Icon: Calendar,
+    to: '/daily',
+    signedOutTo: '/login',
+    gated: true,
+    border: 'border-l-primary',
+    chip: 'bg-primary/10 group-hover:bg-primary/20',
+    tint: 'text-primary',
+  },
+  {
+    key: 'casual',
+    name: 'Casual',
+    blurb: 'Relaxed play. No pressure. No sign-up needed.',
+    Icon: Coffee,
+    to: '/play?mode=casual',
+    signedOutTo: '/play?mode=casual',
+    gated: false,
+    border: 'border-l-primary/40',
+    chip: 'bg-primary/10 group-hover:bg-primary/20',
+    tint: 'text-primary',
+  },
+  {
+    key: 'competitive',
+    name: 'Competitive',
+    blurb: 'Climb the leaderboard.',
+    signedOutBlurb: 'Sign in to compete.',
+    Icon: Swords,
+    to: '/play?mode=competitive',
+    signedOutTo: '/login',
+    gated: true,
+    border: 'border-l-accent',
+    chip: 'bg-accent/10 group-hover:bg-accent/20',
+    tint: 'text-accent',
+  },
+  {
+    key: 'challenge',
+    name: 'Challenge',
+    blurb: 'Real-time multiplayer.',
+    signedOutBlurb: 'Sign in to play with friends.',
+    Icon: Users,
+    to: '/challenge',
+    signedOutTo: '/login?redirect=/challenge',
+    gated: true,
+    border: 'border-l-success',
+    chip: 'bg-success/10 group-hover:bg-success/20',
+    tint: 'text-success',
+  },
+]
+
+/** Descending prominence for the top three, in theme tokens. */
+const MEDALS = [
+  'bg-accent/15 text-accent',
+  'bg-primary/15 text-primary',
+  'bg-surface-muted text-muted',
+]
+
 // Skeleton Components
 const TopPlayersSkeleton = () => (
   <div className="space-y-3">
     {[1, 2, 3].map((i) => (
       <div key={i} className="flex items-center justify-between p-2 rounded-lg animate-pulse">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-full bg-gray-200 dark:bg-gray-700" />
+          <div className="w-7 h-7 rounded-full bg-surface-muted" />
           <div>
-            <div className="h-4 w-24 bg-gray-200 dark:bg-gray-700 rounded mb-1" />
-            <div className="h-3 w-16 bg-gray-200 dark:bg-gray-700 rounded" />
+            <div className="h-4 w-24 bg-surface-muted rounded mb-1" />
+            <div className="h-3 w-16 bg-surface-muted rounded" />
           </div>
         </div>
         <div className="text-right">
-          <div className="h-5 w-10 bg-gray-200 dark:bg-gray-700 rounded mb-1" />
-          <div className="h-3 w-8 bg-gray-200 dark:bg-gray-700 rounded" />
+          <div className="h-5 w-10 bg-surface-muted rounded mb-1" />
+          <div className="h-3 w-8 bg-surface-muted rounded" />
         </div>
       </div>
     ))}
@@ -57,10 +141,10 @@ const RecentAchievementsSkeleton = () => (
   <div className="space-y-2">
     {[1, 2, 3].map((i) => (
       <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-surface-alt animate-pulse">
-        <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 rounded-full" />
+        <div className="w-8 h-8 bg-surface-muted rounded-full" />
         <div className="flex-1">
-          <div className="h-4 w-32 bg-gray-200 dark:bg-gray-700 rounded mb-1" />
-          <div className="h-3 w-20 bg-gray-200 dark:bg-gray-700 rounded" />
+          <div className="h-4 w-32 bg-surface-muted rounded mb-1" />
+          <div className="h-3 w-20 bg-surface-muted rounded" />
         </div>
       </div>
     ))}
@@ -117,10 +201,15 @@ export default function Home() {
     }
   }
 
-  const handleCompetitiveClick = (e: React.MouseEvent) => {
+  /**
+   * Blocks a gated mode for a signed-in-but-unverified account.
+   *
+   * Signed-out visitors fall through — their link already points at /login.
+   */
+  const requireVerified = (label: string, e: React.MouseEvent) => {
     if (user && !isVerified) {
       e.preventDefault()
-      toast.warning('Please verify your email to play Competitive mode', {
+      toast.warning(`Verify your email to play ${label}`, {
         action: {
           label: 'Verify',
           onClick: () => navigate('/verify'),
@@ -129,35 +218,25 @@ export default function Home() {
     }
   }
 
-  const handleChallengeClick = (e: React.MouseEvent) => {
-    if (user && !isVerified) {
-      e.preventDefault()
-      toast.warning('Please verify your email to play Challenge mode', {
-        action: {
-          label: 'Verify',
-          onClick: () => navigate('/verify'),
-        },
-      })
-    }
-  }
+  // One obvious entry point, rather than four cards of equal weight.
+  const primaryCta = user && isVerified
+    ? { to: '/daily', label: "Play today's color" }
+    : { to: '/play?mode=casual', label: user ? 'Play casual' : 'Play now' }
 
-  const handleDailyClick = (e: React.MouseEvent) => {
-    if (user && !isVerified) {
-      e.preventDefault()
-      toast.warning('Please verify your email for Daily Challenge', {
-        action: {
-          label: 'Verify',
-          onClick: () => navigate('/verify'),
-        },
-      })
-    }
-  }
+  const secondaryCta = user
+    ? isVerified
+      ? { to: '/play?mode=casual', label: 'Casual mode' }
+      : { to: '/verify', label: 'Verify email' }
+    : { to: '/login', label: 'Sign in' }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
-      {/* Hero Section with Animated Gradient */}
-      <div className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-accent/5 to-primary/5 animate-pulse" />
+    <div className="min-h-screen bg-base">
+      {/* Hero. The gradient wash is static — an always-animating full-bleed layer
+          gets its own compositing layer and flickers on mobile. */}
+      {/* `border` is already rgba(...,0.05), so no opacity modifier — Tailwind
+          rewrites the alpha channel and /60 would draw a hard black rule. */}
+      <div className="relative overflow-hidden border-b border-border bg-surface">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/[0.07] via-accent/[0.04] to-transparent" />
         <div className="relative max-w-6xl mx-auto px-4 py-16 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -173,19 +252,35 @@ export default function Home() {
               Memorize a color, then reconstruct it from memory.
               How accurate are your eyes?
             </p>
-            
+
+            <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
+              <Link
+                to={primaryCta.to}
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-button font-heading font-medium text-sm bg-deep text-white hover:bg-deep/90 transition-colors"
+              >
+                {primaryCta.label}
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link
+                to={secondaryCta.to}
+                className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-button font-heading font-medium text-sm bg-surface-alt text-deep border border-border hover:bg-surface-muted transition-colors"
+              >
+                {secondaryCta.label}
+              </Link>
+            </div>
+
             {/* Global Stats Badges */}
             {!loading && globalStats && (
-              <div className="flex flex-wrap justify-center gap-4 mb-8">
-                <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full shadow-sm">
+              <div className="flex flex-wrap justify-center gap-3">
+                <div className="flex items-center gap-2 px-4 py-2 bg-surface border border-border rounded-full shadow-sm">
                   <Users className="w-4 h-4 text-primary" />
                   <span className="text-sm font-medium">{globalStats.totalPlayers.toLocaleString()} players</span>
                 </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full shadow-sm">
-                  <Crown className="w-4 h-4 text-yellow-500" />
+                <div className="flex items-center gap-2 px-4 py-2 bg-surface border border-border rounded-full shadow-sm">
+                  <Crown className="w-4 h-4 text-accent" />
                   <span className="text-sm font-medium">Top: {globalStats.topPlayer} ({globalStats.topScore} pts)</span>
                 </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full shadow-sm">
+                <div className="flex items-center gap-2 px-4 py-2 bg-surface border border-border rounded-full shadow-sm">
                   <TrendingUp className="w-4 h-4 text-success" />
                   <span className="text-sm font-medium">Avg rating: {globalStats.avgRating}</span>
                 </div>
@@ -195,7 +290,7 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 pb-16">
+      <div className="max-w-6xl mx-auto px-4 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column: Game Modes */}
           <div className="lg:col-span-2 space-y-4">
@@ -205,101 +300,45 @@ export default function Home() {
               transition={{ duration: 0.6, delay: 0.1 }}
               className="grid grid-cols-1 sm:grid-cols-2 gap-4"
             >
-              {/* Daily Challenge */}
-              <Link
-                to={user ? (isVerified ? '/daily' : '#') : '/login'}
-                onClick={handleDailyClick}
-                className="block group"
-              >
-                <Card hover className="h-full border-l-4 border-l-primary transition-all duration-300 hover:scale-[1.02]">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                      <Calendar className="w-6 h-6 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-heading font-semibold text-lg">Daily Challenge</h3>
-                      <p className="text-muted text-sm">One new color every day. Compete globally.</p>
-                    </div>
-                  </div>
-                </Card>
-              </Link>
+              {MODES.map(mode => {
+                const needsVerify = !!user && mode.gated && !isVerified
+                const to = user ? (needsVerify ? '#' : mode.to) : mode.signedOutTo
+                const blurb = user ? mode.blurb : (mode.signedOutBlurb ?? mode.blurb)
 
-              {/* Casual */}
-              <Link to="/play?mode=casual" className="block group">
-                <Card hover className="h-full border-l-4 border-l-primary/50 transition-all duration-300 hover:scale-[1.02]">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
-                      <Coffee className="w-6 h-6 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-heading font-semibold text-lg">Casual</h3>
-                      <p className="text-muted text-sm">Relaxed play. No pressure. No sign-up needed.</p>
-                    </div>
-                  </div>
-                </Card>
-              </Link>
-
-              {/* Competitive */}
-              <Link
-                to={user ? (isVerified ? '/play?mode=competitive' : '#') : '/login'}
-                onClick={handleCompetitiveClick}
-                className="block group"
-              >
-                <Card hover className="h-full border-l-4 border-l-accent transition-all duration-300 hover:scale-[1.02]">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-xl bg-accent/10 group-hover:bg-accent/20 transition-colors">
-                      <Swords className="w-6 h-6 text-accent" />
-                    </div>
-                    <div>
-                      <h3 className="font-heading font-semibold text-lg">Competitive</h3>
-                      <p className="text-muted text-sm">
-                        {!user ? 'Sign in to compete.' : !isVerified ? 'Verify email to compete.' : 'Climb the leaderboard.'}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              </Link>
-
-              {/* Challenge Mode */}
-              <Link
-                to={user ? (isVerified ? '/challenge' : '#') : '/login?redirect=/challenge'}
-                onClick={handleChallengeClick}
-                className="block group"
-              >
-                <Card hover className="h-full border-l-4 border-l-purple-400 transition-all duration-300 hover:scale-[1.02]">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 rounded-xl bg-purple-400/10 group-hover:bg-purple-400/20 transition-colors">
-                      <Users className="w-6 h-6 text-purple-500" />
-                    </div>
-                    <div>
-                      <h3 className="font-heading font-semibold text-lg">Challenge</h3>
-                      <p className="text-muted text-sm">
-                        {!user ? 'Sign in to play with friends.' : !isVerified ? 'Verify email to play.' : 'Real-time multiplayer.'}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              </Link>
-{/* <div className="block cursor-not-allowed">
-  <Card className="h-full border-l-4 border-l-purple-400 transition-all duration-300">
-    <div className="flex items-start gap-3">
-      <div className="p-2 rounded-xl bg-purple-400/10">
-        <Users className="w-6 h-6 text-purple-500" />
-      </div>
-      <div>
-        <div className="flex items-center gap-2">
-          <h3 className="font-heading font-semibold text-lg">Challenge</h3>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">
-            In Development
-          </span>
-        </div>
-        <p className="text-muted text-sm">
-          Real-time multiplayer — coming very soon!
-        </p>
-      </div>
-    </div>
-  </Card>
-</div> */}
+                return (
+                  <Link
+                    key={mode.key}
+                    to={to}
+                    onClick={mode.gated ? (e => requireVerified(mode.name, e)) : undefined}
+                    className="block group"
+                  >
+                    <Card
+                      hover
+                      className={`h-full border-l-4 ${mode.border} transition-all duration-300 hover:scale-[1.02]`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`p-2 rounded-xl transition-colors ${mode.chip}`}>
+                          <mode.Icon className={`w-6 h-6 ${mode.tint}`} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-heading font-semibold text-lg">{mode.name}</h3>
+                            {/* Locked state is a badge, not reduced opacity — faded
+                                text on this palette lands near 2.3:1. */}
+                            {needsVerify && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-surface-muted text-[10px] font-semibold uppercase tracking-wide text-deep">
+                                <Lock className="w-2.5 h-2.5" />
+                                Verify
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-muted text-sm">{blurb}</p>
+                        </div>
+                      </div>
+                    </Card>
+                  </Link>
+                )
+              })}
             </motion.div>
 
             {/* User Search Section */}
@@ -321,7 +360,7 @@ export default function Home() {
                       handleSearch(e.target.value)
                     }}
                     onFocus={() => searchQuery && setShowSearchDropdown(true)}
-                    className="w-full pl-10 pr-4 py-3 rounded-button bg-surface-alt border border-border focus:outline-none focus:shadow-glow-primary transition-shadow"
+                    className="w-full pl-10 pr-4 py-3 rounded-button bg-surface-alt border border-border text-base sm:text-sm focus:outline-none focus:shadow-glow-primary transition-shadow"
                   />
                   {searching && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -329,7 +368,7 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-                
+
                 <AnimatePresence>
                   {showSearchDropdown && searchResults.length > 0 && (
                     <motion.div
@@ -375,7 +414,7 @@ export default function Home() {
               <Card className="p-4">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <Trophy className="w-5 h-5 text-yellow-500" />
+                    <Trophy className="w-5 h-5 text-accent" />
                     <h3 className="font-heading font-semibold">Top Players</h3>
                   </div>
                   <Link to="/leaderboard" className="text-xs text-primary hover:underline">
@@ -395,11 +434,11 @@ export default function Home() {
                         className="flex items-center justify-between p-2 rounded-lg hover:bg-surface-alt transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                            idx === 0 ? 'bg-yellow-500/20 text-yellow-600' :
-                            idx === 1 ? 'bg-gray-400/20 text-gray-500' :
-                            'bg-amber-600/20 text-amber-700'
-                          }`}>
+                          <div
+                            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                              MEDALS[idx] ?? MEDALS[2]
+                            }`}
+                          >
                             #{player.rank}
                           </div>
                           <div>
@@ -488,44 +527,43 @@ export default function Home() {
           </div>
         </div>
 
-{/* Footer */}
-{/* Footer */}
-<motion.div
-  initial={{ opacity: 0 }}
-  animate={{ opacity: 1 }}
-  transition={{ delay: 0.8 }}
-  className="text-center mt-12 pt-4 border-t border-border/30"
->
-  <div className="flex flex-wrap justify-center gap-x-3 gap-y-2 text-xs text-muted">
-    <span className="whitespace-nowrap">No sign-up required for casual mode.</span>
-    <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
-      <Link 
-        to="/leaderboard" 
-        className="hover:text-primary transition-colors px-2 py-1 rounded-md hover:bg-primary/5"
-      >
-        Leaderboard
-      </Link>
-      <Link 
-        to="/achievements" 
-        className="hover:text-primary transition-colors px-2 py-1 rounded-md hover:bg-primary/5"
-      >
-        Achievements
-      </Link>
-      <Link 
-        to="/faq" 
-        className="font-semibold text-primary hover:text-primary/80 transition-colors px-2 py-1 rounded-md hover:bg-primary/5"
-      >
-        FAQ
-      </Link>
-      <Link 
-        to="/support" 
-        className="hover:text-primary transition-colors px-2 py-1 rounded-md hover:bg-primary/5"
-      >
-        Support
-      </Link>
-    </div>
-  </div>
-</motion.div>
+        {/* Footer */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+          className="text-center mt-12 pt-4 border-t border-border"
+        >
+          <div className="flex flex-wrap justify-center gap-x-3 gap-y-2 text-xs text-muted">
+            <span className="whitespace-nowrap">No sign-up required for casual mode.</span>
+            <div className="flex flex-wrap justify-center gap-x-3 gap-y-1">
+              <Link
+                to="/leaderboard"
+                className="hover:text-primary transition-colors px-2 py-1 rounded-md hover:bg-primary/5"
+              >
+                Leaderboard
+              </Link>
+              <Link
+                to="/achievements"
+                className="hover:text-primary transition-colors px-2 py-1 rounded-md hover:bg-primary/5"
+              >
+                Achievements
+              </Link>
+              <Link
+                to="/faq"
+                className="font-semibold text-primary hover:text-primary/80 transition-colors px-2 py-1 rounded-md hover:bg-primary/5"
+              >
+                FAQ
+              </Link>
+              <Link
+                to="/support"
+                className="hover:text-primary transition-colors px-2 py-1 rounded-md hover:bg-primary/5"
+              >
+                Support
+              </Link>
+            </div>
+          </div>
+        </motion.div>
       </div>
     </div>
   )

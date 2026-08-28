@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CornerUpLeft, MessageCircle, SendHorizontal, X } from 'lucide-react'
-import type { ChatMessage, ChatReplyTo } from '../../types/multiplayer'
+import type { ChatMessage, ChatReplyTo, GamePhase } from '../../types/multiplayer'
+import { voice as voiceApi } from '../../lib/api'
 import { Card } from '../ui/Card'
+import { VoiceMessage } from './VoiceMessage'
+import { VoiceRecorder } from './VoiceRecorder'
 
 interface ChatPanelProps {
   messages: ChatMessage[]
@@ -15,6 +18,10 @@ interface ChatPanelProps {
   typingUsers?: string[]
   /** Announce composing state. Throttled by the context — safe to call per keystroke. */
   onTyping?: (isTyping: boolean) => void
+  /** Room code, needed to address a voice upload. Omitting it hides the mic. */
+  roomCode?: string
+  /** Voice is lobby-and-results only; the server enforces the same rule. */
+  phase?: GamePhase
   className?: string
 }
 
@@ -22,6 +29,15 @@ const MAX_RENDERED = 50
 
 /** How long after the last keystroke we consider someone to have stopped. */
 const TYPING_IDLE_MS = 2_500
+
+/**
+ * Phases where a voice note is allowed.
+ *
+ * Mid-round audio is a coaching channel — one player narrating the colour they
+ * just saw while another is still reconstructing it. The server rejects uploads
+ * outside these phases too; hiding the button is the courtesy, not the control.
+ */
+const VOICE_PHASES: GamePhase[] = ['waiting', 'results', 'ended']
 
 function timeLabel(timestamp: string): string {
   const date = new Date(timestamp)
@@ -44,6 +60,8 @@ export function ChatPanel({
   compact = false,
   typingUsers = [],
   onTyping,
+  roomCode,
+  phase,
   className = '',
 }: ChatPanelProps) {
   const [input, setInput] = useState('')
@@ -119,6 +137,20 @@ export function ChatPanel({
     stopTyping()
   }
 
+  // Nothing is added to the list here: the upload route broadcasts the message
+  // itself, so it arrives back over the socket like any other. That keeps one
+  // source of truth for chat history instead of an optimistic copy that has to be
+  // reconciled with the real one.
+  const sendVoice = useCallback(
+    async (blob: Blob, durationMs: number) => {
+      if (!roomCode) return
+      await voiceApi.send(blob, roomCode, durationMs)
+    },
+    [roomCode]
+  )
+
+  const canRecord = !!roomCode && !!phase && VOICE_PHASES.includes(phase)
+
   const visible = messages.slice(-MAX_RENDERED)
 
   return (
@@ -182,7 +214,15 @@ export function ChatPanel({
                         <span className="line-clamp-2 text-muted">{msg.replyTo.message}</span>
                       </span>
                     )}
-                    <span>{msg.message}</span>
+                    {msg.voice ? (
+                      <VoiceMessage
+                        url={msg.voice.url}
+                        durationMs={msg.voice.durationMs}
+                        isYou={isYou}
+                      />
+                    ) : (
+                      <span>{msg.message}</span>
+                    )}
                   </span>
 
                   <button
@@ -255,8 +295,11 @@ export function ChatPanel({
           maxLength={200}
           aria-label="Chat message"
           disabled={!canSend}
-          className="flex-1 min-w-0 px-3 py-2 rounded-button bg-surface-alt border border-border text-sm focus:outline-none focus:shadow-glow-primary disabled:opacity-50"
+          // text-base below sm stops iOS Safari zooming the page on focus, which
+          // it does to any field under 16px.
+          className="flex-1 min-w-0 px-3 py-2 rounded-button bg-surface-alt border border-border text-base sm:text-sm focus:outline-none focus:shadow-glow-primary disabled:opacity-50"
         />
+        {canRecord && <VoiceRecorder onRecorded={sendVoice} disabled={!canSend} />}
         <button
           type="submit"
           disabled={!canSend || !input.trim()}

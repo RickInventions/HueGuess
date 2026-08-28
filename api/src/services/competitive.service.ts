@@ -85,20 +85,18 @@ export class CompetitiveService {
     const newTotalAcc = totalAcc + accuracy;
     const newAvgAcc = newTotalAcc / newGames;
 
-    await pool.query(`UPDATE competitive_stats SET rating=$1, rank_tier=$2, games_played=$3, total_accuracy=$4, avg_accuracy=$5, current_streak=$6, best_streak=$7, last_game_at=NOW(), updated_at=NOW() WHERE user_id=$8`,
-      [newRating, newTier, newGames, newTotalAcc, newAvgAcc, newStreak, newBestStreak, userId]);
+    await pool.query(`UPDATE competitive_stats SET rating=$1, rank_tier=$2, games_played=$3, total_accuracy=$4, avg_accuracy=$5, current_streak=$6, best_streak=$7, best_score=GREATEST(COALESCE(best_score, 0), $8), last_game_at=NOW(), updated_at=NOW() WHERE user_id=$9`,
+      [newRating, newTier, newGames, newTotalAcc, newAvgAcc, newStreak, newBestStreak, accuracy, userId]);
 
     await pool.query(`INSERT INTO rating_history (user_id, game_round_id, rating_before, rating_after, rating_change, accuracy, difficulty) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
       [userId, roundId, oldRating, newRating, change, accuracy, difficulty]);
 
-
-const newlyUnlocked = await AchievementService.checkAndUnlockAchievements(userId, {
-  accuracy,
-  difficulty,
-  mode: 'competitive',
-  ratingAfter: newRating,
-  streakAfter: newStreak,
-});
+    // Re-derived from the database rather than from this round's deltas. The old
+    // call passed `ratingAfter`/`streakAfter` in, and the service coalesced them
+    // with `||` — so a streak that had just been broken (0) fell through to the
+    // stale stored value and could unlock a streak achievement the player had
+    // lost. Nothing is passed now, so nothing can disagree with the stats.
+    const newlyUnlocked = await AchievementService.syncAchievements(userId);
 
     return { oldRating, newRating, ratingChange: change, oldStreak: streak, newStreak, rankTier: newTier, newlyUnlocked };
   }

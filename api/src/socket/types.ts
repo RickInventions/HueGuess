@@ -57,6 +57,15 @@ export interface ChatMessage {
   userId?: string;
   socketId?: string;
   replyTo?: ChatReplyTo;
+  /**
+   * A voice note. Set only by the upload route — a client can neither send this
+   * over the socket nor choose the URL, so nobody can make every other browser
+   * in the room fetch an address of their choosing.
+   */
+  voice?: {
+    url: string;
+    durationMs: number;
+  };
 }
 
 export interface Room {

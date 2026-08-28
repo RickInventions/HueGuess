@@ -4,6 +4,9 @@ import { authMiddleware, AuthRequest } from '../middleware/auth.middleware.js';
 
 const router = Router();
 
+/** Keep in step with the picker's cap in the frontend. */
+const MAX_SHOWCASE = 3;
+
 // Get all achievements
 router.get('/', async (req, res) => {
   try {
@@ -18,17 +21,25 @@ router.get('/', async (req, res) => {
 // Get my achievements (unlocked + locked with progress)
 router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const achievements = await AchievementService.getUserAchievements(req.user!.userId);
-    const stats = await AchievementService.getAchievementStats(req.user!.userId);
-    const unseenCount = await AchievementService.getUnseenCount(req.user!.userId);
-    const recent = await AchievementService.getRecentUnlocked(req.user!.userId, 10);
-    
+    const userId = req.user!.userId;
+
+    // In parallel: getUserAchievements syncs first, and the rest only read, so
+    // there is no ordering requirement between them.
+    const [achievements, stats, unseenCount, recent, showcase] = await Promise.all([
+      AchievementService.getUserAchievements(userId),
+      AchievementService.getAchievementStats(userId),
+      AchievementService.getUnseenCount(userId),
+      AchievementService.getRecentUnlocked(userId, 10),
+      AchievementService.getShowcase(userId),
+    ]);
+
     res.json({
       success: true,
       ...achievements,
       stats,
       unseenCount,  // NEW - number for badge
       recent,
+      showcase,
     });
   } catch (error) {
     console.error('Get my achievements error:', error);
@@ -93,6 +104,46 @@ router.get('/unseen-count', authMiddleware, async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Get unseen count error:', error);
     res.status(500).json({ error: 'Failed to get unseen count' });
+  }
+});
+
+// The up-to-three achievements pinned to your profile
+router.get('/showcase', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const showcase = await AchievementService.getShowcase(req.user!.userId);
+    res.json({ success: true, showcase });
+  } catch (error) {
+    console.error('Get showcase error:', error);
+    res.status(500).json({ error: 'Failed to fetch showcase' });
+  }
+});
+
+router.put('/showcase', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { keys } = req.body;
+
+    if (!Array.isArray(keys) || keys.some(k => typeof k !== 'string')) {
+      res.status(400).json({ error: 'keys must be an array of achievement keys' });
+      return;
+    }
+    if (keys.length > MAX_SHOWCASE) {
+      res.status(400).json({ error: `Pin at most ${MAX_SHOWCASE} achievements` });
+      return;
+    }
+
+    // The service filters to keys the caller has actually unlocked, so a pin of
+    // something locked is dropped rather than rejected — but a request that was
+    // *entirely* locked keys is a client bug worth reporting.
+    const showcase = await AchievementService.setShowcase(req.user!.userId, keys);
+    if (keys.length > 0 && showcase.length === 0) {
+      res.status(400).json({ error: 'You have not unlocked those achievements' });
+      return;
+    }
+
+    res.json({ success: true, showcase });
+  } catch (error) {
+    console.error('Set showcase error:', error);
+    res.status(500).json({ error: 'Failed to update showcase' });
   }
 });
 

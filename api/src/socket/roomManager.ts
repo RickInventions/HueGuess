@@ -10,6 +10,7 @@ import {
 } from './types.js';
 import { HSLColor, DIFFICULTY_CONFIGS } from '../types/game.types.js';
 import { generateRandomColor, calculateAccuracy, validateHSL } from '../utils/hsl.utils.js';
+import { VoiceService } from '../services/voice.service.js';
 
 /** Unambiguous charset — no 0/O or 1/I, so codes can be read out loud. */
 const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -270,6 +271,9 @@ class RoomManager {
 
     if (room.players.size === 0) {
       this.rooms.delete(roomCode);
+      // The room map was the only record that this room's voice notes exist, so
+      // they have to go with it or they are billable storage nothing can reach.
+      void VoiceService.deleteRoom(roomCode);
       return { roomCode, room: null, player, newHostSocketId: null, roomDeleted: true };
     }
 
@@ -310,6 +314,7 @@ class RoomManager {
       }
     }
     this.rooms.delete(code);
+    void VoiceService.deleteRoom(code);
   }
 
   /**

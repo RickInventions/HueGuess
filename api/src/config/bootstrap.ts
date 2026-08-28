@@ -1,5 +1,6 @@
 import pool from './db.js';
 import { RANK_LADDER, getRankTier } from '../utils/rank.utils.js';
+import { VoiceService } from '../services/voice.service.js';
 
 /**
  * Idempotent schema work, run once at boot.
@@ -97,6 +98,24 @@ export async function backfillRankTiers(): Promise<number> {
 }
 
 /**
+ * Columns the achievement rework needs.
+ *
+ * `sort_order` exists because the catalogue used to be ordered by a
+ * `CASE category` with no `ELSE`, which put any category the CASE had not heard
+ * of in an arbitrary place. The seed script assigns it, so display order is
+ * decided in one readable list rather than by a SQL expression.
+ */
+const ACHIEVEMENT_COLUMNS = `
+  ALTER TABLE achievements ADD COLUMN IF NOT EXISTS tier       TEXT    DEFAULT 'bronze';
+  ALTER TABLE achievements ADD COLUMN IF NOT EXISTS points     INTEGER DEFAULT 10;
+  ALTER TABLE achievements ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+
+  -- Up to three keys the player pins to their profile. A JSONB array rather than
+  -- a join table: it is ordered, capped at three, and only ever read as a whole.
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS showcase_achievements JSONB DEFAULT '[]'::jsonb;
+`;
+
+/**
  * Runs the bootstrap. Never throws: a database that is briefly unreachable at
  * boot should not stop the server from coming up and serving what it can.
  */
@@ -109,10 +128,27 @@ export async function bootstrapSchema(): Promise<void> {
   }
 
   try {
+    await pool.query(ACHIEVEMENT_COLUMNS);
+    console.log('✅ Achievement schema ready');
+  } catch (error) {
+    console.error('❌ Achievement schema failed:', (error as Error).message);
+  }
+
+  try {
     const updated = await backfillRankTiers();
     if (updated > 0) console.log(`✅ Rank labels rewritten for ${updated} account(s)`);
     else console.log('✅ Rank labels already current');
   } catch (error) {
     console.error('❌ Rank backfill failed:', (error as Error).message);
+  }
+
+  // Rooms live in memory, so every voice note from a room that was open when the
+  // process last died is now unreachable — nothing points at it and nothing ever
+  // will. Without this sweep they accumulate as billable storage forever.
+  try {
+    const swept = await VoiceService.sweepOrphans();
+    if (swept > 0) console.log(`🧹 Removed ${swept} orphaned voice note(s)`);
+  } catch (error) {
+    console.error('❌ Voice sweep failed:', (error as Error).message);
   }
 }
