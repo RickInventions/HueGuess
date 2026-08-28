@@ -297,7 +297,7 @@ export function ChatPanel({
           disabled={!canSend}
           // text-base below sm stops iOS Safari zooming the page on focus, which
           // it does to any field under 16px.
-          className="flex-1 min-w-0 px-3 py-2 rounded-button bg-surface-alt border border-border text-base sm:text-sm focus:outline-none focus:shadow-glow-primary disabled:opacity-50"
+          className="flex-1 min-w-0 px-3 py-2 rounded-button bg-surface-alt border border-border sm:text-sm focus:outline-none focus:shadow-glow-primary disabled:opacity-50"
         />
         {canRecord && <VoiceRecorder onRecorded={sendVoice} disabled={!canSend} />}
         <button
