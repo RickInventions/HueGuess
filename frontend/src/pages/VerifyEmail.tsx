@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 export default function VerifyEmail() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const { user, checkAuth } = useAuth()
+  const { user, adoptSession } = useAuth()
   
   const tokenFromUrl = searchParams.get('token')
   const emailFromUrl = searchParams.get('email') || user?.email || ''
@@ -45,10 +45,13 @@ export default function VerifyEmail() {
         if (response.data.success) {
           setVerified(true)
           toast.success('Email verified successfully!')
-          
-          // Refresh auth context to update isVerified status
-          await checkAuth()
-          
+
+          // Verification hands back a real session — take it, so clicking the link
+          // leaves you logged in instead of on a success screen with no account.
+          if (response.data.token && response.data.user) {
+            adoptSession(response.data.user, response.data.token)
+          }
+
           // Redirect after 2 seconds
           setTimeout(() => navigate('/profile'), 2000)
         } else {
@@ -58,22 +61,22 @@ export default function VerifyEmail() {
         console.error('Verification error:', err)
         // Handle different error formats
         let message = 'Verification failed. The link may have expired.'
-        
+
         if (err.response?.data?.error) {
           message = err.response.data.error
         } else if (err.message) {
           message = err.message
         }
-        
+
         setError(message)
         toast.error(message)
       } finally {
         setLoading(false)
       }
     }
-    
+
     verifyWithToken()
-  }, [tokenFromUrl, emailFromUrl, navigate, checkAuth])
+  }, [tokenFromUrl, emailFromUrl, navigate, adoptSession])
 
   const handleCodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -91,10 +94,11 @@ export default function VerifyEmail() {
       if (response.data.success) {
         setVerified(true)
         toast.success('Email verified successfully!')
-        
-        // Refresh auth context
-        await checkAuth()
-        
+
+        if (response.data.token && response.data.user) {
+          adoptSession(response.data.user, response.data.token)
+        }
+
         setTimeout(() => navigate('/profile'), 2000)
       } else {
         throw new Error(response.data.message || 'Verification failed')

@@ -9,6 +9,7 @@ import type {
   RoomConfig,
   RoundResult,
   ChatMessage,
+  ChatReplyTo,
   TypingSignal,
   GamePhase,
   GameEndReason,
@@ -105,7 +106,7 @@ interface MultiplayerContextType {
   submitColor: (color: HSLColor) => void;
   playAgain: () => void;
   endRoom: () => void;
-  sendMessage: (message: string) => void;
+  sendMessage: (message: string, replyTo?: ChatReplyTo) => void;
   /** Tell the room you're composing. Throttled internally — call it per keystroke. */
   sendTyping: (isTyping: boolean) => void;
   resetRoom: () => void;
@@ -953,10 +954,14 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
   const lastTypingSentAt = useRef(0);
 
   const sendMessage = useCallback(
-    (message: string) => {
+    (message: string, replyTo?: ChatReplyTo) => {
       const text = message.trim();
       if (!socket?.connected || !text) return;
-      socket.emit('send_message', { message: text.slice(0, 200) });
+      socket.emit('send_message', {
+        message: text.slice(0, 200),
+        // The server re-sanitises the quote, so this is a hint, not a trusted value.
+        ...(replyTo ? { replyTo } : {}),
+      });
       // The server broadcasts the stop signal too, but resetting the throttle
       // here keeps it from suppressing the next "started typing".
       lastTypingSentAt.current = 0;

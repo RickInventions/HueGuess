@@ -36,8 +36,17 @@ export default function Login() {
     } catch (err: unknown) {
       // Extract error message from axios error response
       let message = 'Login failed'
-      
+
       if (axios.isAxiosError(err)) {
+        // Not a bad password — the account just isn't verified yet. Send them to
+        // code entry rather than leaving them guessing at their own credentials.
+        if (err.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
+          const pending = err.response.data.email ?? email.trim()
+          toast.info('Verify your email to finish signing in')
+          navigate(`/verify?email=${encodeURIComponent(pending)}`)
+          return
+        }
+
         // Server responded with error
         if (err.response?.data?.error) {
           message = err.response.data.error

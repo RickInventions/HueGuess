@@ -124,6 +124,19 @@ export default function Room() {
     if (phase === 'reconstruction') soundService.playMemorizationEnd()
   }, [phase])
 
+  /**
+   * Jump to the top whenever the phase turns over.
+   *
+   * On a phone each phase is taller than the viewport, so arriving mid-page meant
+   * the colour, the sliders, or the round results could all start out scrolled off
+   * screen — and during memorization the seconds spent scrolling are the round.
+   * `auto` rather than `smooth`: a timed reveal shouldn't wait on an animation.
+   */
+  useEffect(() => {
+    if (phase === 'waiting') return
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }, [phase, currentRound])
+
   // ── Round reset ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (phase === 'memorization') {
@@ -543,7 +556,10 @@ export default function Room() {
                 key="memorize"
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, filter: 'blur(8px)' }}
+                // Opacity and scale only. Animating `filter: blur()` here promoted a
+                // large element to its own layer mid-transition, and on phones that
+                // showed up as the whole screen flashing once at the colour reveal.
+                exit={{ opacity: 0, scale: 0.98 }}
                 transition={{ duration: 0.4 }}
                 className="space-y-4"
               >

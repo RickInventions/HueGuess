@@ -25,6 +25,16 @@ const sizes = {
 }
 
 /**
+ * How many modals currently want the page behind them frozen.
+ *
+ * Ref-counted rather than each modal saving and restoring the value itself:
+ * modals nest (the friends list opens a remove-friend confirm), and with
+ * save/restore the inner one unlocking last would write `hidden` back onto a
+ * page with no modal left on it — locking the body for good.
+ */
+let scrollLocks = 0
+
+/**
  * Overlay dialog rendered into a portal on document.body.
  *
  * A portal because the modal is opened from inside game views that sit in
@@ -44,24 +54,30 @@ export function Modal({
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
 
+  // Latest onClose without it being an effect dependency — callers pass an inline
+  // arrow, so a new identity every render would re-run the lock effect constantly.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   // Escape closes, and while open the page behind must not scroll — on mobile a
   // scrollable body under an overlay makes the dialog feel detached from the page.
   useEffect(() => {
     if (!open) return
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') onCloseRef.current()
     }
 
     document.addEventListener('keydown', onKeyDown)
-    const previousOverflow = document.body.style.overflow
+    scrollLocks += 1
     document.body.style.overflow = 'hidden'
 
     return () => {
       document.removeEventListener('keydown', onKeyDown)
-      document.body.style.overflow = previousOverflow
+      scrollLocks = Math.max(0, scrollLocks - 1)
+      if (scrollLocks === 0) document.body.style.overflow = ''
     }
-  }, [open, onClose])
+  }, [open])
 
   // Move focus into the dialog so keyboard and screen-reader users land inside it
   // rather than continuing from whatever was focused on the page behind.
@@ -80,6 +96,11 @@ export function Modal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
+          // Belt and braces: an exit animation that never finishes would leave this
+          // full-screen layer mounted and invisible, swallowing every tap on the page
+          // behind it while touch-scroll still passed through. Keyed off `open` rather
+          // than the animation, so a closed modal can never eat a click.
+          style={{ pointerEvents: open ? 'auto' : 'none' }}
         >
           <div
             className="absolute inset-0 bg-deep/40 backdrop-blur-[2px]"

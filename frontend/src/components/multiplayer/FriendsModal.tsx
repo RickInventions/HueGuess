@@ -57,7 +57,6 @@ function Row({
 }) {
   return (
     <motion.li
-      layout
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       className="flex items-center gap-3 rounded-card border border-border bg-surface-alt/60 px-3 py-2.5"

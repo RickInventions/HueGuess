@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { MessageCircle, SendHorizontal } from 'lucide-react'
-import type { ChatMessage } from '../../types/multiplayer'
+import { CornerUpLeft, MessageCircle, SendHorizontal, X } from 'lucide-react'
+import type { ChatMessage, ChatReplyTo } from '../../types/multiplayer'
 import { Card } from '../ui/Card'
 
 interface ChatPanelProps {
   messages: ChatMessage[]
-  onSend: (message: string) => void
+  onSend: (message: string, replyTo?: ChatReplyTo) => void
   /** False while offline or reconnecting — the composer locks rather than dropping messages. */
   canSend: boolean
   currentUserId?: string
@@ -47,7 +47,15 @@ export function ChatPanel({
   className = '',
 }: ChatPanelProps) {
   const [input, setInput] = useState('')
+  const [replyTo, setReplyTo] = useState<ChatReplyTo | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  /** Quote a message and put the cursor in the field, so replying is one tap. */
+  const startReply = useCallback((msg: ChatMessage) => {
+    setReplyTo({ username: msg.username, message: msg.message })
+    inputRef.current?.focus()
+  }, [])
 
   // Pin to the newest message. Scrolls the container itself rather than calling
   // scrollIntoView, which would drag the whole page on mobile. Runs on mount too,
@@ -105,8 +113,9 @@ export function ChatPanel({
     e.preventDefault()
     const text = input.trim()
     if (!text || !canSend) return
-    onSend(text)
+    onSend(text, replyTo ?? undefined)
     setInput('')
+    setReplyTo(null)
     stopTyping()
   }
 
@@ -154,13 +163,41 @@ export function ChatPanel({
                   </span>
                 )}
                 <span
-                  className={`max-w-[85%] px-2.5 py-1.5 rounded-2xl text-xs break-words ${
-                    isYou
-                      ? 'bg-primary/15 text-deep rounded-br-md'
-                      : 'bg-surface-alt text-deep/90 rounded-bl-md'
+                  className={`group/msg flex max-w-full items-start gap-1 ${
+                    isYou ? 'flex-row-reverse' : 'flex-row'
                   }`}
                 >
-                  {msg.message}
+                  <span
+                    className={`flex max-w-[85%] flex-col gap-1 px-2.5 py-1.5 rounded-2xl text-xs break-words ${
+                      isYou
+                        ? 'bg-primary/15 text-deep rounded-br-md'
+                        : 'bg-surface-alt text-deep/90 rounded-bl-md'
+                    }`}
+                  >
+                    {/* The quote is carried on the message itself, so it still renders
+                        after the message it answers has aged out of the history. */}
+                    {msg.replyTo && (
+                      <span className="flex flex-col border-l-2 border-primary/40 pl-2 text-[10px]">
+                        <span className="font-medium text-primary">{msg.replyTo.username}</span>
+                        <span className="line-clamp-2 text-muted">{msg.replyTo.message}</span>
+                      </span>
+                    )}
+                    <span>{msg.message}</span>
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => startReply(msg)}
+                    aria-label={`Reply to ${isYou ? 'your message' : msg.username}`}
+                    title="Reply"
+                    // In the flow rather than absolutely placed: the list scrolls
+                    // vertically, and an offset button hanging outside the bubble
+                    // would give it something to scroll sideways too. Visible at 60%
+                    // so it is tappable on a phone, where there is no hover.
+                    className="mt-0.5 shrink-0 rounded-button p-1.5 text-muted opacity-60 transition-opacity hover:bg-surface-muted hover:text-deep group-hover/msg:opacity-100 cursor-pointer"
+                  >
+                    <CornerUpLeft className="h-3 w-3" />
+                  </button>
                 </span>
               </div>
             )
@@ -185,8 +222,31 @@ export function ChatPanel({
         )}
       </div>
 
+      {/* Sits above the composer so it is impossible to send a reply without
+          seeing what it is aimed at — the quote is fixed at tap time, and a
+          message that scrolls away would otherwise leave no trace of it. */}
+      {replyTo && (
+        <div className="mb-2 flex items-start gap-2 rounded-button border-l-2 border-primary bg-surface-alt px-2.5 py-1.5">
+          <span className="min-w-0 flex-1 flex flex-col">
+            <span className="text-[10px] font-medium text-primary">
+              Replying to {replyTo.username}
+            </span>
+            <span className="truncate text-xs text-muted">{replyTo.message}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setReplyTo(null)}
+            aria-label="Cancel reply"
+            className="shrink-0 rounded-button p-1 text-muted transition-colors hover:bg-surface-muted hover:text-deep cursor-pointer"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="flex gap-2">
         <input
+          ref={inputRef}
           type="text"
           value={input}
           onChange={handleChange}

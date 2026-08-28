@@ -5,6 +5,7 @@ import { setupSocketHandlers } from './handlers.js';
 import { registerPresence, setPresenceServer } from './presence.js';
 import { SocketUser } from './types.js';
 import { JwtPayload } from '../types/index.js';
+import { AuthService } from '../services/auth.service.js';
 
 /** Every origin allowed to open a socket — mirrors the REST CORS list. */
 function allowedOrigins(): string[] {
@@ -57,7 +58,7 @@ export function initializeSocketIO(server: HttpServer) {
   // ── Handshake auth ────────────────────────────────────────────────────────
   // Identity is established once, here, and read from socket.data everywhere
   // else. Handlers never trust a client-supplied userId.
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     const token = readToken(socket);
     if (!token) {
       return next(new Error('AUTH_REQUIRED'));
@@ -73,10 +74,14 @@ export function initializeSocketIO(server: HttpServer) {
       const payload = jwt.verify(token, secret) as JwtPayload;
       if (!payload?.userId) return next(new Error('AUTH_INVALID'));
 
+      // Verification status comes from the database, not the token. The token's
+      // claim is frozen at login and would keep reporting `false` for the whole
+      // seven days after somebody verified — which is what made competitive mode
+      // reject accounts the database had already confirmed.
       const user: SocketUser = {
         userId: String(payload.userId),
         username: payload.username ?? 'Player',
-        isVerified: !!payload.isVerified,
+        isVerified: await AuthService.isVerified(String(payload.userId)),
       };
       socket.data.user = user;
       return next();

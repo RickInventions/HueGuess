@@ -56,7 +56,9 @@ export default function Register() {
     try {
       await register(username, email, password)
       toast.success('Account created! Check your email to verify.')
-      navigate('/verify')
+      // Carry the address across — registration deliberately leaves you logged out,
+      // so the verify page has no signed-in user to read it from.
+      navigate(`/verify?email=${encodeURIComponent(email.trim())}`)
     } catch (err: unknown) {
       let message = 'Registration failed'
       

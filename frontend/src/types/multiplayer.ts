@@ -55,12 +55,25 @@ export interface LeaderboardEntry {
   playedAgain?: boolean;
 }
 
+/**
+ * The message a reply is answering, quoted inline.
+ *
+ * A snippet rather than a reference: chat history is capped, so a message the
+ * reply points at can be trimmed away, and an id-based reply would then render
+ * as a quote of nothing.
+ */
+export interface ChatReplyTo {
+  username: string;
+  message: string;
+}
+
 export interface ChatMessage {
   username: string;
   message: string;
   timestamp: string;
   userId?: string;
   socketId?: string;
+  replyTo?: ChatReplyTo;
 }
 
 /**

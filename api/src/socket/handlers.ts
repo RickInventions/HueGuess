@@ -14,6 +14,7 @@ import {
   Room,
   SocketUser,
   GameEndReason,
+  ChatReplyTo,
 } from './types.js';
 import { Difficulty } from '../types/game.types.js';
 import { HSLColor } from '../types/game.types.js';
@@ -867,7 +868,7 @@ export function setupSocketHandlers(io: Server, socket: Socket) {
   });
 
   // ── Chat ──────────────────────────────────────────────────────────────────
-  on<{ message?: unknown }>('send_message', data => {
+  on<{ message?: unknown; replyTo?: unknown }>('send_message', data => {
     const room = roomManager.getRoomBySocketId(socket.id);
     if (!room) return;
 
@@ -883,12 +884,24 @@ export function setupSocketHandlers(io: Server, socket: Socket) {
       return;
     }
 
+    // The quote is re-sanitised here rather than trusted: it arrives from the
+    // sender's client, so without this a reply would be a way to put arbitrary
+    // text in someone else's name in front of the whole room.
+    let replyTo: ChatReplyTo | undefined;
+    const candidate = data?.replyTo as { username?: unknown; message?: unknown } | undefined;
+    if (candidate && typeof candidate.username === 'string' && typeof candidate.message === 'string') {
+      const quotedName = candidate.username.replace(/\s+/g, ' ').trim().slice(0, 30);
+      const quotedText = candidate.message.replace(/\s+/g, ' ').trim().slice(0, MAX_CHAT_LENGTH);
+      if (quotedName && quotedText) replyTo = { username: quotedName, message: quotedText };
+    }
+
     const payload = {
       socketId: socket.id,
       userId: player.userId,
       username: player.username,
       message,
       timestamp: new Date().toISOString(),
+      ...(replyTo ? { replyTo } : {}),
     };
 
     roomManager.addChatMessage(room, payload);

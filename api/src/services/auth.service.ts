@@ -7,14 +7,26 @@ import { RegisterInput, LoginInput } from '../types/index.js';
 const JWT_SECRET = process.env.JWT_SECRET!;
 const JWT_EXPIRES_IN = '7d';
 
+/**
+ * Canonical form of an address, for both storing and looking up.
+ *
+ * Mailbox names are case-sensitive per the RFC but no real provider treats them
+ * that way, and a person who signed up as Oatman@gmail.com will type
+ * oatman@gmail.com next week and expect to get in. Lookups additionally compare
+ * with LOWER(email) so rows written before this existed still match.
+ */
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
 export class AuthService {
   static async register({ username, email, password }: RegisterInput) {
+    const normalizedEmail = normalizeEmail(email);
+
     // Check if user exists
     const existingUser = await pool.query(
-      'SELECT id FROM users WHERE email = $1 OR username = $2',
-      [email, username]
+      'SELECT id FROM users WHERE LOWER(email) = $1 OR LOWER(username) = LOWER($2)',
+      [normalizedEmail, username]
     );
-    
+
     if (existingUser.rows.length > 0) {
       throw new Error('User with this email or username already exists');
     }
@@ -24,10 +36,10 @@ export class AuthService {
 
     // Create user
     const result = await pool.query(
-      `INSERT INTO users (username, email, password_hash) 
-       VALUES ($1, $2, $3) 
+      `INSERT INTO users (username, email, password_hash)
+       VALUES ($1, $2, $3)
        RETURNING id, username, email, is_verified, created_at`,
-      [username, email, password_hash]
+      [username, normalizedEmail, password_hash]
     );
 
     const user = result.rows[0];
@@ -45,7 +57,7 @@ export class AuthService {
     );
 
     // Send verification email
-    await EmailService.sendVerificationEmail(email, token, code, username);
+    await EmailService.sendVerificationEmail(normalizedEmail, token, code, username);
 
     // Return user WITHOUT token (only login gives token)
     return {
@@ -62,9 +74,9 @@ export class AuthService {
 
   static async login({ email, password }: LoginInput) {
     const result = await pool.query(
-      `SELECT id, username, email, password_hash, is_verified 
-       FROM users WHERE email = $1`,
-      [email]
+      `SELECT id, username, email, password_hash, is_verified
+       FROM users WHERE LOWER(email) = $1`,
+      [normalizeEmail(email)]
     );
 
     if (result.rows.length === 0) {
@@ -72,12 +84,27 @@ export class AuthService {
     }
 
     const user = result.rows[0];
-  
-    
+
+
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
 
     if (!isValidPassword) {
       throw new Error('Invalid email or password');
+    }
+
+    // Refuse the token rather than issuing one that says isVerified: false — a
+    // seven-day token minted here used to outlive the verification itself, and
+    // the holder kept being told to verify an address the database had already
+    // confirmed. The code is tagged so the client can route to code entry
+    // instead of showing a dead end.
+    if (!user.is_verified) {
+      const error = new Error('Please verify your email before logging in') as Error & {
+        code?: string;
+        email?: string;
+      };
+      error.code = 'EMAIL_NOT_VERIFIED';
+      error.email = user.email;
+      throw error;
     }
 
     // Generate JWT only on successful login
@@ -99,124 +126,153 @@ export class AuthService {
     };
   }
 
-  static async verifyEmail(token: string, email: string) {
-    // Find valid token
+  /**
+   * Current verification state, straight from the database.
+   *
+   * Every gate must call this instead of reading the JWT's `isVerified` claim:
+   * the claim is a snapshot from login time and goes stale the moment somebody
+   * verifies, which is exactly the window new users were getting stuck in.
+   */
+  static async isVerified(userId: string): Promise<boolean> {
+    const result = await pool.query('SELECT is_verified FROM users WHERE id = $1', [userId]);
+    return result.rows[0]?.is_verified === true;
+  }
+
+  /** Log the user in off the back of a successful verification. */
+  private static async issueSessionFor(userId: string) {
     const result = await pool.query(
-      `SELECT vt.id, vt.user_id, vt.token, vt.expires_at, vt.used, u.email, u.is_verified
-       FROM email_verification_tokens vt
-       JOIN users u ON vt.user_id = u.id
-       WHERE vt.token = $1 AND u.email = $2 AND vt.used = false`,
-      [token, email]
+      'SELECT id, username, email, is_verified FROM users WHERE id = $1',
+      [userId]
     );
+    const user = result.rows[0];
+    if (!user) throw new Error('Account no longer exists');
 
-    if (result.rows.length === 0) {
-      throw new Error('Invalid or expired verification link');
-    }
+    return {
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        is_verified: user.is_verified,
+      },
+      token: this.generateToken({
+        userId: user.id,
+        email: user.email,
+        username: user.username,
+        isVerified: user.is_verified,
+      }),
+    };
+  }
 
-    const verification = result.rows[0];
-
-    if (new Date() > verification.expires_at) {
-      // Delete expired unverified user
-      await pool.query(
-        `DELETE FROM users WHERE id = $1 AND is_verified = false`,
-        [verification.user_id]
-      );
-      throw new Error('Verification link has expired. Please register again.');
-    }
-
-    if (verification.is_verified) {
-      throw new Error('Email already verified');
-    }
-
-    // Mark token as used and verify user
-    await pool.query('BEGIN');
-    try {
-      await pool.query(
-        `UPDATE email_verification_tokens SET used = true WHERE id = $1`,
-        [verification.id]
-      );
-      
-      await pool.query(
-        `UPDATE users SET is_verified = true WHERE id = $1`,
-        [verification.user_id]
-      );
-      
-      await pool.query('COMMIT');
-    } catch (error) {
-      await pool.query('ROLLBACK');
-      throw error;
-    }
-
-    // Delete any other unused tokens for this user
-    await pool.query(
-      `DELETE FROM email_verification_tokens 
-       WHERE user_id = $1 AND used = false`,
-      [verification.user_id]
-    );
-
-    return { success: true, message: 'Email verified successfully' };
+  static async verifyEmail(token: string, email: string) {
+    return this.consumeVerification('token', token, email);
   }
 
   static async verifyWithCode(email: string, code: string) {
+    return this.consumeVerification('code', code, email);
+  }
+
+  /**
+   * Redeem a verification link or code, and hand back a session.
+   *
+   * Three deliberate choices, each fixing a way the old flow stranded people:
+   *
+   * - It returns a token, so verifying logs you in. Previously it returned only
+   *   a success message and the client had to send you back to log in again.
+   * - Already-verified is a success, not an error. Clicking the link twice, or
+   *   entering the code after the link already worked, used to answer "Invalid
+   *   or expired" — which reads as broken when the account is in fact fine.
+   * - It matches the address case-insensitively, so the address in the link's
+   *   query string doesn't have to match the stored capitalisation.
+   */
+  private static async consumeVerification(
+    kind: 'token' | 'code',
+    value: string,
+    email: string
+  ) {
+    const normalizedEmail = normalizeEmail(email);
+    const column = kind === 'token' ? 'vt.token' : 'vt.code';
+
     const result = await pool.query(
-      `SELECT vt.id, vt.user_id, vt.code, vt.expires_at, vt.used, u.email, u.is_verified
+      `SELECT vt.id, vt.user_id, vt.expires_at, vt.used, u.is_verified
        FROM email_verification_tokens vt
        JOIN users u ON vt.user_id = u.id
-       WHERE u.email = $1 AND vt.code = $2 AND vt.used = false`,
-      [email, code]
+       WHERE ${column} = $1 AND LOWER(u.email) = $2
+       ORDER BY vt.expires_at DESC
+       LIMIT 1`,
+      [value, normalizedEmail]
     );
 
+    // No matching row at all — but if the address is already verified, the row was
+    // simply cleaned up after a successful verification. That is a success.
     if (result.rows.length === 0) {
-      throw new Error('Invalid or expired verification code');
+      const existing = await pool.query(
+        'SELECT id, is_verified FROM users WHERE LOWER(email) = $1',
+        [normalizedEmail]
+      );
+      if (existing.rows[0]?.is_verified) {
+        return { success: true, message: 'Email already verified', ...(await this.issueSessionFor(existing.rows[0].id)) };
+      }
+      throw new Error(
+        kind === 'token'
+          ? 'Invalid or expired verification link'
+          : 'Invalid or expired verification code'
+      );
     }
 
     const verification = result.rows[0];
 
-    if (new Date() > verification.expires_at) {
-      // Delete expired unverified user
-      await pool.query(
-        `DELETE FROM users WHERE id = $1 AND is_verified = false`,
-        [verification.user_id]
-      );
-      throw new Error('Verification code has expired. Please register again.');
+    // Already done — hand over the session rather than an error.
+    if (verification.is_verified) {
+      return {
+        success: true,
+        message: 'Email already verified',
+        ...(await this.issueSessionFor(verification.user_id)),
+      };
     }
 
-    if (verification.is_verified) {
-      throw new Error('Email already verified');
+    if (new Date() > verification.expires_at) {
+      // Delete expired unverified user
+      await pool.query(`DELETE FROM users WHERE id = $1 AND is_verified = false`, [
+        verification.user_id,
+      ]);
+      throw new Error(
+        kind === 'token'
+          ? 'Verification link has expired. Please register again.'
+          : 'Verification code has expired. Please register again.'
+      );
     }
 
     await pool.query('BEGIN');
     try {
-      await pool.query(
-        `UPDATE email_verification_tokens SET used = true WHERE id = $1`,
-        [verification.id]
-      );
-      
-      await pool.query(
-        `UPDATE users SET is_verified = true WHERE id = $1`,
-        [verification.user_id]
-      );
-      
+      await pool.query(`UPDATE email_verification_tokens SET used = true WHERE id = $1`, [
+        verification.id,
+      ]);
+      await pool.query(`UPDATE users SET is_verified = true WHERE id = $1`, [
+        verification.user_id,
+      ]);
       await pool.query('COMMIT');
     } catch (error) {
       await pool.query('ROLLBACK');
       throw error;
     }
 
-    // Delete any other unused tokens for this user
+    // Drop the rest of this user's unused tokens.
     await pool.query(
-      `DELETE FROM email_verification_tokens 
-       WHERE user_id = $1 AND used = false`,
+      `DELETE FROM email_verification_tokens WHERE user_id = $1 AND used = false`,
       [verification.user_id]
     );
 
-    return { success: true, message: 'Email verified successfully' };
+    return {
+      success: true,
+      message: 'Email verified successfully',
+      ...(await this.issueSessionFor(verification.user_id)),
+    };
   }
 
   static async resendVerification(email: string) {
     const userResult = await pool.query(
-      'SELECT id, username, email, is_verified FROM users WHERE email = $1',
-      [email]
+      'SELECT id, username, email, is_verified FROM users WHERE LOWER(email) = $1',
+      [normalizeEmail(email)]
     );
 
     if (userResult.rows.length === 0) {
@@ -272,8 +328,8 @@ export class AuthService {
 
   static async forgotPassword(email: string) {
     const userResult = await pool.query(
-      'SELECT id, username, email, is_verified FROM users WHERE email = $1',
-      [email]
+      'SELECT id, username, email, is_verified FROM users WHERE LOWER(email) = $1',
+      [normalizeEmail(email)]
     );
 
     if (userResult.rows.length === 0) {
@@ -314,8 +370,8 @@ export class AuthService {
       `SELECT prt.id, prt.user_id, prt.expires_at, prt.used, u.email, u.is_verified
        FROM password_reset_tokens prt
        JOIN users u ON prt.user_id = u.id
-       WHERE prt.token = $1 AND u.email = $2 AND prt.used = false`,
-      [token, email]
+       WHERE prt.token = $1 AND LOWER(u.email) = $2 AND prt.used = false`,
+      [token, normalizeEmail(email)]
     );
 
     if (result.rows.length === 0) {

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { JwtPayload } from '../types/index.js';
+import { AuthService } from '../services/auth.service.js';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
@@ -53,14 +54,33 @@ export const optionalAuthMiddleware = (
   next();
 };
 
-export const requireVerified = (
+/**
+ * Gate for verified-only routes.
+ *
+ * Reads the flag from the database rather than the token's `isVerified` claim.
+ * The claim is fixed at login and cannot know about a verification that happened
+ * afterwards, which is how freshly-verified users ended up being told to verify
+ * an address the database had already confirmed.
+ */
+export const requireVerified = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
 ) => {
-  if (!req.user?.isVerified) {
-    res.status(403).json({ error: 'Email verification required' });
+  const userId = req.user?.userId;
+  if (!userId) {
+    res.status(401).json({ error: 'No token provided' });
     return;
   }
-  next();
+
+  try {
+    if (!(await AuthService.isVerified(String(userId)))) {
+      res.status(403).json({ error: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' });
+      return;
+    }
+    next();
+  } catch (error) {
+    console.error('requireVerified error:', error);
+    res.status(500).json({ error: 'Could not check verification status' });
+  }
 };

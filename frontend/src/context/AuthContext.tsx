@@ -2,7 +2,6 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { auth } from '../lib/api';
 import type { User } from '../types';
-import { toast } from 'sonner';
 
 interface AuthContextType {
   user: User | null;
@@ -11,6 +10,8 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
   logout: () => void;
+  /** Adopt a session handed back by email verification, so verifying logs you in. */
+  adoptSession: (user: User, token: string) => void;
   resendVerification: (email: string) => Promise<void>;
   isAuthenticated: boolean;
   isVerified: boolean;
@@ -80,13 +81,12 @@ const validateStoredAuth = async () => {
   };
 
   const register = async (username: string, email: string, password: string) => {
-    const response = await auth.register(username, email, password);
-    const { user: newUser, token: authToken } = response.data;
-    
-    setUser(newUser);
-    setToken(authToken);
-    localStorage.setItem('token', authToken);
-    localStorage.setItem('user', JSON.stringify(newUser));
+    // Registration deliberately returns no token — the account is not usable
+    // until the address is verified. Writing `undefined` into localStorage here
+    // is what used to log the new user straight back out: every later request
+    // went out as `Bearer undefined`, came back 401, and tripped the global
+    // logout. So store nothing and let the caller send them to code entry.
+    await auth.register(username, email, password);
   };
 
   const logout = () => {
@@ -94,7 +94,19 @@ const validateStoredAuth = async () => {
     setToken(null);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    toast.info('Logged out successfully');
+  };
+
+  /**
+   * Take the session that /verify and /verify-code now hand back.
+   *
+   * Verifying used to leave you logged out on a success screen, so the account
+   * was confirmed in the database while the browser still held nothing.
+   */
+  const adoptSession = (verifiedUser: User, authToken: string) => {
+    setUser(verifiedUser);
+    setToken(authToken);
+    localStorage.setItem('token', authToken);
+    localStorage.setItem('user', JSON.stringify(verifiedUser));
   };
 
   const resendVerification = async (email: string) => {
@@ -120,6 +132,7 @@ const validateStoredAuth = async () => {
         login,
         register,
         logout,
+        adoptSession,
         resendVerification,
         isAuthenticated: !!user,
         isVerified: user?.is_verified || false,

@@ -47,7 +47,14 @@ router.post('/login', authRateLimiter, async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Login error:', error);
-    res.status(401).json({ error: (error as Error).message });
+    const err = error as Error & { code?: string; email?: string };
+    // Unverified is not a credentials failure — tag it so the client can send the
+    // user to code entry instead of leaving them on a dead login screen.
+    if (err.code === 'EMAIL_NOT_VERIFIED') {
+      res.status(403).json({ error: err.message, code: err.code, email: err.email });
+      return;
+    }
+    res.status(401).json({ error: err.message });
   }
 });
 
@@ -55,19 +62,15 @@ router.post('/login', authRateLimiter, async (req, res) => {
 router.get('/verify', async (req, res) => {
   try {
     const { token, email } = req.query;
-    
+
     if (!token || !email) {
       res.status(400).json({ error: 'Missing token or email' });
       return;
     }
-    
+
+    // Returns a session token too, so clicking the link logs you straight in.
     const result = await AuthService.verifyEmail(token as string, email as string);
-    
-    // Return JSON instead of redirect for CORS
-    res.json({ 
-      success: true, 
-      message: 'Email verified successfully' 
-    });
+    res.json(result);
   } catch (error) {
     console.error('Verification error:', error);
     const message = (error as Error).message;

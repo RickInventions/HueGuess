@@ -29,7 +29,13 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // A 401 from the auth endpoints themselves is a failed sign-in attempt, not an
+    // expired session — treating it as one wiped storage and fired a second global
+    // logout on top of the first, which is where the duplicate toast came from.
+    const url: string = error.config?.url ?? '';
+    const isAuthAttempt = /\/auth\/(login|register|verify|verify-code|resend-verification|forgot-password|reset-password)/.test(url);
+
+    if (error.response?.status === 401 && !isAuthAttempt) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.dispatchEvent(new Event('auth:logout'));
