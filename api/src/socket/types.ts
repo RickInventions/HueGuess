@@ -169,7 +169,7 @@ export interface LeaderboardEntryDTO {
 export type ReactionMapDTO = Record<string, Record<string, string[]>>;
 
 /** The only emoji a client may send. Anything else is dropped, not stored. */
-export const REACTION_EMOJIS = ['😂', '😭', '🔥', '🤯', '💀', '👀'] as const;
+export const REACTION_EMOJIS = ['😂', '😭', '🔥', '🤯', '💀', '👀', '🍅'] as const;
 
 /** Identity resolved from the JWT during the socket handshake. */
 export interface SocketUser {

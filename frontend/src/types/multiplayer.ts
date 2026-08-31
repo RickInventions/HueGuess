@@ -82,8 +82,8 @@ export interface LeaderboardEntry {
  */
 export type ReactionMap = Record<string, Record<string, string[]>>;
 
-/** The six reactions, in display order. Mirrors REACTION_EMOJIS on the server. */
-export const REACTION_EMOJIS = ['😂', '😭', '🔥', '🤯', '💀', '👀'] as const;
+/** The seven reactions, in display order. Mirrors REACTION_EMOJIS on the server. */
+export const REACTION_EMOJIS = ['😂', '😭', '🔥', '🤯', '💀', '👀', '🍅'] as const;
 
 /**
  * The message a reply is answering, quoted inline.
