@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Clock, Eye, Hash, Settings2, Sliders, Users } from 'lucide-react'
+import { Clock, Eye, Hash, Settings2, Shuffle, Skull, Sliders, Swords, Users } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { RoomSetup } from './RoomSetup'
 import type { RoomConfig } from '../../types/multiplayer'
@@ -33,6 +33,11 @@ export function RoomSettings({
   const [editing, setEditing] = useState(false)
 
   const rows = [
+    {
+      icon: <Swords className="w-3.5 h-3.5" />,
+      label: 'Mode',
+      value: config.mode === 'duel' ? 'Duel' : 'Challenge',
+    },
     { icon: <Sliders className="w-3.5 h-3.5" />, label: 'Difficulty', value: config.difficulty },
     { icon: <Users className="w-3.5 h-3.5" />, label: 'Max players', value: `${config.maxPlayers}` },
     { icon: <Clock className="w-3.5 h-3.5" />, label: 'Round time', value: `${config.roundTimeSeconds}s` },
@@ -40,7 +45,23 @@ export function RoomSettings({
     {
       icon: <Hash className="w-3.5 h-3.5" />,
       label: 'Rounds',
-      value: config.specificRounds === null ? 'Unlimited' : `${config.specificRounds}`,
+      // Elimination decides the count from the player count, so there is no
+      // number to show until the game starts.
+      value: config.elimination
+        ? 'Until one left'
+        : config.specificRounds === null
+          ? 'Unlimited'
+          : `${config.specificRounds}`,
+    },
+    {
+      icon: <Shuffle className="w-3.5 h-3.5" />,
+      label: 'Slider start',
+      value: config.sliderShuffle ? 'Shuffled' : '0 / 0 / 0',
+    },
+    {
+      icon: <Skull className="w-3.5 h-3.5" />,
+      label: 'Elimination',
+      value: config.elimination ? `Every ${config.elimEveryRounds}` : 'Off',
     },
   ]
 

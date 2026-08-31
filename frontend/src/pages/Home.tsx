@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Coffee, Swords, ArrowRight, Trophy, User, Users, Calendar,
-  Search, Medal, TrendingUp, Crown, Lock
+  Search, Medal, TrendingUp, Crown, Lock, Flame
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -50,7 +50,7 @@ interface Mode {
 }
 
 /**
- * The four modes, as data rather than four near-identical JSX blocks.
+ * The five modes, as data rather than five near-identical JSX blocks.
  *
  * Tailwind classes are written out in full — the JIT compiler scans source text,
  * so a class assembled from a variable would never make it into the stylesheet.
@@ -106,6 +106,19 @@ const MODES: Mode[] = [
     border: 'border-l-success',
     chip: 'bg-success/10 group-hover:bg-success/20',
     tint: 'text-success',
+  },
+  {
+    key: 'duel',
+    name: 'Duel',
+    blurb: 'A point a round to the closest guess.',
+    signedOutBlurb: 'Sign in to duel your friends.',
+    Icon: Flame,
+    to: '/duel',
+    signedOutTo: '/login?redirect=/duel',
+    gated: true,
+    border: 'border-l-deep',
+    chip: 'bg-deep/10 group-hover:bg-deep/20',
+    tint: 'text-deep',
   },
 ]
 

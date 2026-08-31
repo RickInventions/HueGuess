@@ -289,6 +289,16 @@ export function FriendsModal({ open, onClose, inRoom = false, initialTab = 'frie
               <ul className="space-y-2">
                 {friends.map(friend => {
                   const invited = invitedUserIds.includes(friend.userId)
+                  // Mid-game: an invite would land over their sliders, and the
+                  // server rejects it, so the button is off rather than lying.
+                  const busy = friend.activity === 'in_game'
+                  const note = !friend.isOnline
+                    ? 'Offline'
+                    : busy
+                      ? 'In a game'
+                      : friend.activity === 'in_room'
+                        ? 'In a room'
+                        : undefined
                   return (
                     <Row
                       key={friend.userId}
@@ -296,20 +306,22 @@ export function FriendsModal({ open, onClose, inRoom = false, initialTab = 'frie
                       rankTier={friend.rankTier}
                       rating={friend.rating}
                       isOnline={friend.isOnline}
-                      note={!friend.isOnline ? 'Offline' : undefined}
+                      note={note}
                       actions={
                         <>
                           {inRoom && (
                             <IconAction
                               label={
                                 invited
-                                  ? 'Invite sent'
-                                  : friend.isOnline
-                                    ? `Invite ${friend.username} to this room`
-                                    : `${friend.username} is offline`
+                                  ? 'Invite sent — you can send another shortly'
+                                  : !friend.isOnline
+                                    ? `${friend.username} is offline`
+                                    : busy
+                                      ? `${friend.username} is in the middle of a game`
+                                      : `Invite ${friend.username} to this room`
                               }
                               tone={invited ? 'success' : 'primary'}
-                              disabled={!friend.isOnline || invited}
+                              disabled={!friend.isOnline || busy || invited}
                               onClick={() => inviteToRoom(friend.userId)}
                             >
                               {invited ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
@@ -334,7 +346,7 @@ export function FriendsModal({ open, onClose, inRoom = false, initialTab = 'frie
 
             {inRoom && friends.length > 0 && (
               <p className="mt-3 text-center text-[11px] text-muted">
-                Invites reach friends who are online right now.
+                Invites reach friends who are online and not mid-game.
               </p>
             )}
           </>
@@ -426,7 +438,7 @@ export function FriendsModal({ open, onClose, inRoom = false, initialTab = 'frie
                 placeholder="Search by username"
                 autoComplete="off"
                 // 16px minimum: anything smaller makes iOS Safari zoom the page on focus.
-                className="w-full rounded-button border border-border bg-surface-alt py-2.5 pl-9 pr-9   sm:text-sm text-deep placeholder:text-muted focus:border-primary/40 focus:outline-none"
+                className="w-full rounded-button border border-border bg-surface-alt py-2.5 pl-9 pr-9 text-base sm:text-sm text-deep placeholder:text-muted focus:border-primary/40 focus:outline-none"
               />
               {searching && (
                 <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary" />

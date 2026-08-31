@@ -4,7 +4,14 @@ export type PlayerStatus = 'waiting' | 'ready' | 'playing' | 'disconnected';
 export type GamePhase = 'waiting' | 'countdown' | 'memorization' | 'reconstruction' | 'results' | 'ended';
 
 /** Reason a game ended — surfaced to the client so it can explain itself. */
-export type GameEndReason = 'rounds_complete' | 'not_enough_players' | 'host_ended';
+export type GameEndReason =
+  | 'rounds_complete'
+  | 'not_enough_players'
+  | 'host_ended'
+  | 'last_player_standing';
+
+/** How a room scores itself. Duel awards a point per round win; challenge averages accuracy. */
+export type RoomMode = 'challenge' | 'duel';
 
 export interface Player {
   socketId: string;
@@ -15,6 +22,16 @@ export interface Player {
   currentAccuracy?: number;
   totalAccuracy: number;
   roundsPlayed: number;
+  /** Duel mode: rounds won. Always present so the DTO never has to branch. */
+  points: number;
+  /**
+   * Elimination mode: knocked out, now a spectator — in the room and in chat,
+   * but out of the running.
+   *
+   * A flag rather than a PlayerStatus, because status is rewritten on every
+   * phase change and on disconnect/reconnect, all of which would erase it.
+   */
+  eliminated: boolean;
   disconnectedAt?: Date;
 }
 
@@ -27,6 +44,8 @@ export interface PlayerDTO {
   status: PlayerStatus;
   totalAccuracy: number;
   roundsPlayed: number;
+  points: number;
+  eliminated: boolean;
   currentAccuracy?: number;
 }
 
@@ -36,6 +55,12 @@ export interface RoomConfig {
   difficulty: Difficulty;
   specificRounds: number | null; // null = unlimited
   maxPlayers: number;
+  mode: RoomMode;
+  /** Start the reconstruction sliders somewhere random instead of 0/0/0. */
+  sliderShuffle: boolean;
+  /** Battle royale: drop the lowest scorer every `elimEveryRounds` rounds. */
+  elimination: boolean;
+  elimEveryRounds: number;
 }
 
 /**
@@ -78,11 +103,30 @@ export interface Room {
   currentColor?: HSLColor;
   /** The colour of the round just played — kept so results survive a reconnect. */
   lastColor?: HSLColor;
+  /**
+   * Where the reconstruction sliders start this round (slider shuffle).
+   * Generated server-side so every player begins from the same place and a
+   * reconnect mid-round restores it rather than re-rolling.
+   */
+  startColor?: HSLColor;
   roundStartTime?: Date;
   /** Epoch ms at which the current phase ends — clients derive their timers from this. */
   phaseEndsAt?: number;
   roundResults: Map<string, RoundResult>;
   playAgainVotes: Set<string>;
+  /**
+   * Emoji reactions on this round's results: whose result → who reacted → emoji.
+   *
+   * Keyed by userId, not socketId: a reconnect rebinds a player's socket, which
+   * would orphan every reaction pointing at the old id.
+   */
+  reactions: Map<string, Map<string, string>>;
+  /**
+   * Who elimination knocked out at the end of the round just played, if anyone.
+   * Held on the room rather than returned from endRound so the results screen
+   * still announces it after a reconnect. Cleared when the next round starts.
+   */
+  lastEliminated?: { userId: string; username: string };
   /** Last N chat messages, replayed to players who join or reconnect. */
   chat: ChatMessage[];
   createdAt: Date;
@@ -112,7 +156,20 @@ export interface LeaderboardEntryDTO {
   averageAccuracy: number;
   roundsPlayed: number;
   totalAccuracy: number;
+  points: number;
+  eliminated: boolean;
 }
+
+/**
+ * Reactions on the wire: whose result → emoji → the userIds that picked it.
+ *
+ * Reactor ids rather than counts, so one broadcast serves every viewer — each
+ * client derives both the tally and whether the reaction is its own.
+ */
+export type ReactionMapDTO = Record<string, Record<string, string[]>>;
+
+/** The only emoji a client may send. Anything else is dropped, not stored. */
+export const REACTION_EMOJIS = ['😂', '😭', '🔥', '🤯', '💀', '👀'] as const;
 
 /** Identity resolved from the JWT during the socket handshake. */
 export interface SocketUser {

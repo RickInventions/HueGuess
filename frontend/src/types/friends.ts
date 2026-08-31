@@ -16,6 +16,11 @@ export interface Friend {
   friendsSince: string | null
   /** Connected to the socket server right now. Invites only work for these. */
   isOnline: boolean
+  /**
+   * What they're busy with. `in_game` means an invite would land over their
+   * sliders, so the server rejects it too — this is only the label for it.
+   */
+  activity?: 'in_room' | 'in_game' | null
 }
 
 export interface FriendRequest {

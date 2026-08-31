@@ -40,7 +40,10 @@ interface FriendsContextType {
   removeFriend: (userId: string) => Promise<void>
   /** Push a room invite over the socket. Only works while you're in a room. */
   inviteToRoom: (userId: string) => void
-  /** userIds invited from the current room this session, so the button can say so. */
+  /**
+   * userIds you invited recently enough that the button is still on cooldown.
+   * Entries expire on their own, so inviting twice needs no reload.
+   */
   invitedUserIds: string[]
 }
 
@@ -61,7 +64,38 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
   const [incoming, setIncoming] = useState<FriendRequest[]>([])
   const [outgoing, setOutgoing] = useState<FriendRequest[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [invitedUserIds, setInvitedUserIds] = useState<string[]>([])
+
+  /**
+   * userId → epoch ms at which their Invite button comes back.
+   *
+   * A map with self-expiring entries rather than a growing list: the old list was
+   * only ever cleared when the room changed, so within one room you could invite
+   * someone exactly once per page load.
+   */
+  const [inviteCooldowns, setInviteCooldowns] = useState<Record<string, number>>({})
+  const cooldownTimers = useRef<Map<string, number>>(new Map())
+
+  /** Mark someone invited and schedule the entry's own removal. */
+  const startInviteCooldown = useCallback((userId: string, durationMs: number) => {
+    const running = cooldownTimers.current.get(userId)
+    if (running) window.clearTimeout(running)
+
+    setInviteCooldowns(prev => ({ ...prev, [userId]: Date.now() + durationMs }))
+
+    // No ticking countdown label: that is a re-render a second for a button that
+    // simply comes back. It reads "Invite sent" until this fires.
+    const timer = window.setTimeout(() => {
+      cooldownTimers.current.delete(userId)
+      setInviteCooldowns(prev => {
+        if (!(userId in prev)) return prev
+        const next = { ...prev }
+        delete next[userId]
+        return next
+      })
+    }, durationMs)
+
+    cooldownTimers.current.set(userId, timer)
+  }, [])
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) {
@@ -154,9 +188,9 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
       })
     }
 
-    const onInviteSent = (data: { userId: string; delivered: boolean }) => {
+    const onInviteSent = (data: { userId: string; delivered: boolean; cooldownMs?: number }) => {
       if (data.delivered) {
-        setInvitedUserIds(prev => (prev.includes(data.userId) ? prev : [...prev, data.userId]))
+        startInviteCooldown(data.userId, data.cooldownMs ?? 60_000)
       } else {
         toast.error('They went offline — invite not delivered')
       }
@@ -175,12 +209,25 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
       socket.off('room_invite', onRoomInvite)
       socket.off('invite_sent', onInviteSent)
     }
-  }, [socket, refresh, currentRoom?.code, joinRoom, navigate])
+  }, [socket, refresh, currentRoom?.code, joinRoom, navigate, startInviteCooldown])
 
-  // Invites are scoped to a room, so leaving one clears the "Invited" markers.
+  // Invites are scoped to a room, so leaving one drops every cooldown with it.
   useEffect(() => {
-    setInvitedUserIds([])
+    for (const timer of cooldownTimers.current.values()) window.clearTimeout(timer)
+    cooldownTimers.current.clear()
+    setInviteCooldowns({})
   }, [currentRoom?.code])
+
+  // Nothing should still be ticking after the provider goes away.
+  useEffect(() => {
+    const timers = cooldownTimers.current
+    return () => {
+      for (const timer of timers.values()) window.clearTimeout(timer)
+      timers.clear()
+    }
+  }, [])
+
+  const invitedUserIds = useMemo(() => Object.keys(inviteCooldowns), [inviteCooldowns])
 
   const relationshipFor = useCallback(
     (userId: string): FriendRelationship => {

@@ -7,6 +7,8 @@ import {
   LeaderboardEntryDTO,
   ChatMessage,
   GameEndReason,
+  ReactionMapDTO,
+  REACTION_EMOJIS,
 } from './types.js';
 import { HSLColor, DIFFICULTY_CONFIGS } from '../types/game.types.js';
 import { generateRandomColor, calculateAccuracy, validateHSL } from '../utils/hsl.utils.js';
@@ -54,6 +56,8 @@ class RoomManager {
       status: player.status,
       totalAccuracy: Math.round(player.totalAccuracy * 1000) / 1000,
       roundsPlayed: player.roundsPlayed,
+      points: player.points,
+      eliminated: player.eliminated,
       currentAccuracy: player.currentAccuracy,
     };
   }
@@ -109,6 +113,21 @@ class RoomManager {
     return this.getConnectedPlayers(room).length;
   }
 
+  /**
+   * Players still in the running: connected AND not eliminated.
+   *
+   * This — not getConnectedPlayers — is what gates rounds. An eliminated
+   * spectator can never ready up or submit, so counting them would freeze the
+   * room waiting for input that cannot arrive.
+   */
+  getActivePlayers(room: Room): Player[] {
+    return Array.from(room.players.values()).filter(p => p.status !== 'disconnected' && !p.eliminated);
+  }
+
+  getActiveCount(room: Room): number {
+    return this.getActivePlayers(room).length;
+  }
+
   // ── Room lifecycle ────────────────────────────────────────────────────────
 
   createRoom(hostSocketId: string, hostUserId: string, hostUsername: string, config: RoomConfig): Room {
@@ -122,6 +141,8 @@ class RoomManager {
       isHost: true,
       totalAccuracy: 0,
       roundsPlayed: 0,
+      points: 0,
+      eliminated: false,
     };
 
     const room: Room = {
@@ -133,6 +154,7 @@ class RoomManager {
       totalRounds: config.specificRounds,
       roundResults: new Map(),
       playAgainVotes: new Set(),
+      reactions: new Map(),
       chat: [],
       createdAt: new Date(),
     };
@@ -175,6 +197,8 @@ class RoomManager {
       isHost: false,
       totalAccuracy: 0,
       roundsPlayed: 0,
+      points: 0,
+      eliminated: false,
     };
 
     room.players.set(socketId, player);
@@ -264,6 +288,12 @@ class RoomManager {
     room.players.delete(socketId);
     room.roundResults.delete(socketId);
     room.playAgainVotes.delete(socketId);
+    if (player) {
+      // Reactions are keyed by userId, so they outlive the socket and have to be
+      // swept explicitly — both the ones on their result and the ones they left.
+      room.reactions.delete(player.userId);
+      for (const reactors of room.reactions.values()) reactors.delete(player.userId);
+    }
     this.playerToRoom.delete(socketId);
     if (player && this.userToRoom.get(player.userId) === roomCode) {
       this.userToRoom.delete(player.userId);
@@ -360,16 +390,19 @@ class RoomManager {
 
     const player = room.players.get(socketId);
     if (!player || player.status === 'disconnected') return null;
+    // Spectators have nothing to ready up for, and letting them would mean the
+    // room waits on someone who has no sliders.
+    if (player.eliminated) return null;
 
     player.status = isReady ? 'ready' : 'waiting';
     return room;
   }
 
-  /** All connected players ready, and enough of them to play. */
+  /** All players still in the running are ready, and enough of them to play. */
   areAllPlayersReady(room: Room): boolean {
-    const connected = this.getConnectedPlayers(room);
-    if (connected.length < 2) return false;
-    return connected.every(p => p.status === 'ready');
+    const active = this.getActivePlayers(room);
+    if (active.length < 2) return false;
+    return active.every(p => p.status === 'ready');
   }
 
   // ── Round lifecycle ───────────────────────────────────────────────────────
@@ -383,18 +416,35 @@ class RoomManager {
 
     room.phase = 'waiting';
     room.currentRound = 1;
-    room.totalRounds = room.config.specificRounds;
+    room.totalRounds = this.deriveTotalRounds(room);
     room.roundResults.clear();
     room.playAgainVotes.clear();
+    room.reactions.clear();
 
     for (const player of room.players.values()) {
       player.status = player.status === 'disconnected' ? 'disconnected' : 'playing';
       player.totalAccuracy = 0;
       player.roundsPlayed = 0;
       player.currentAccuracy = undefined;
+      player.points = 0;
+      player.eliminated = false;
     }
 
     return room;
+  }
+
+  /**
+   * How many rounds this game runs for.
+   *
+   * In elimination the host doesn't choose: the count is whatever it takes to
+   * knock everyone but one player out, so it's fixed at kickoff from the players
+   * actually present. Someone leaving mid-game doesn't shorten it — the
+   * last-player-standing check ends it early instead.
+   */
+  private deriveTotalRounds(room: Room): number | null {
+    if (!room.config.elimination) return room.config.specificRounds;
+    const every = Math.max(1, room.config.elimEveryRounds);
+    return Math.max(1, (Math.max(2, this.getActiveCount(room)) - 1) * every);
   }
 
   /** Begin the memorization phase of the current round. Stats are preserved. */
@@ -402,7 +452,7 @@ class RoomManager {
     const room = this.getRoom(roomCode);
     if (!room) return null;
     if (room.phase !== 'waiting' && room.phase !== 'results') return null;
-    if (this.getConnectedCount(room) < 2) return null;
+    if (this.getActiveCount(room) < 2) return null;
 
     const config = DIFFICULTY_CONFIGS[room.config.difficulty];
     const color = generateRandomColor(config.saturationRange, config.lightnessRange);
@@ -410,16 +460,44 @@ class RoomManager {
     room.phase = 'memorization';
     room.currentColor = color;
     room.lastColor = color;
+    room.startColor = room.config.sliderShuffle ? this.generateStartColor(color) : undefined;
     room.roundStartTime = new Date();
     room.phaseEndsAt = Date.now() + room.config.colorTimeSeconds * 1000;
     room.roundResults.clear();
+    // Reactions belong to the round they were left on.
+    room.reactions.clear();
+    room.lastEliminated = undefined;
 
     for (const player of room.players.values()) {
-      if (player.status !== 'disconnected') player.status = 'playing';
+      if (player.status !== 'disconnected' && !player.eliminated) player.status = 'playing';
       player.currentAccuracy = undefined;
     }
 
     return { room, color };
+  }
+
+  /**
+   * A random slider starting position for slider shuffle.
+   *
+   * Rejects anything that lands near the target: a free start worth 80% would
+   * make the round a formality rather than a harder version of the same puzzle.
+   */
+  private generateStartColor(target: HSLColor): HSLColor {
+    const MAX_FREE_ACCURACY = 55;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const candidate: HSLColor = {
+        h: Math.floor(Math.random() * 361),
+        s: Math.floor(Math.random() * 101),
+        l: Math.floor(Math.random() * 101),
+      };
+      if (calculateAccuracy(target, candidate) <= MAX_FREE_ACCURACY) return candidate;
+    }
+    // Ten misses is vanishingly unlikely; the opposite hue is a guaranteed miss.
+    return {
+      h: (target.h + 180) % 360,
+      s: Math.abs(100 - target.s),
+      l: Math.abs(100 - target.l),
+    };
   }
 
   startReconstruction(roomCode: string): Room | null {
@@ -444,6 +522,7 @@ class RoomManager {
 
     const player = room.players.get(socketId);
     if (!player) return null;
+    if (player.eliminated) return null;
     if (room.roundResults.has(socketId)) return null;
 
     const safeColor: HSLColor = {
@@ -471,12 +550,12 @@ class RoomManager {
 
   /** How many of the players we're still waiting on have answered. */
   getSubmissionProgress(room: Room): { submitted: number; total: number } {
-    const connected = this.getConnectedPlayers(room);
-    const submitted = connected.filter(p => room.roundResults.has(p.socketId)).length;
-    return { submitted, total: connected.length };
+    const active = this.getActivePlayers(room);
+    const submitted = active.filter(p => room.roundResults.has(p.socketId)).length;
+    return { submitted, total: active.length };
   }
 
-  /** Every connected player has answered — the round can close early. */
+  /** Every player still in the running has answered — the round can close early. */
   allConnectedSubmitted(room: Room): boolean {
     const { submitted, total } = this.getSubmissionProgress(room);
     return total > 0 && submitted >= total;
@@ -489,9 +568,13 @@ class RoomManager {
     // Only a live round can be ended — guards against a late submit re-ending it.
     if (room.phase !== 'memorization' && room.phase !== 'reconstruction') return null;
 
-    for (const [socketId] of room.players) {
-      if (!room.roundResults.has(socketId)) {
-        room.roundResults.set(socketId, {
+    // Spectators are skipped throughout: no timeout row, no stats, no scoring.
+    // Giving them a 0% row would put them in the results list every round.
+    const contenders = Array.from(room.players.values()).filter(p => !p.eliminated);
+
+    for (const player of contenders) {
+      if (!room.roundResults.has(player.socketId)) {
+        room.roundResults.set(player.socketId, {
           accuracy: 0,
           userColor: { h: 0, s: 0, l: 0 },
           submittedAt: new Date(),
@@ -500,12 +583,15 @@ class RoomManager {
       }
     }
 
-    for (const [socketId, player] of room.players) {
-      const result = room.roundResults.get(socketId)!;
+    for (const player of contenders) {
+      const result = room.roundResults.get(player.socketId)!;
       player.totalAccuracy += result.accuracy;
       player.roundsPlayed++;
       player.currentAccuracy = result.accuracy;
     }
+
+    if (room.config.mode === 'duel') this.awardDuelPoints(room);
+    room.lastEliminated = room.config.elimination ? this.applyElimination(room) : undefined;
 
     room.phase = 'results';
     // No deadline: results stay on screen until every connected player readies
@@ -520,6 +606,55 @@ class RoomManager {
     }
 
     return room;
+  }
+
+  /**
+   * Duel scoring: a point to whoever was closest this round.
+   *
+   * Two rules, both deliberate. Everyone tied for the lead scores, so a genuine
+   * tie rewards both players instead of picking arbitrarily. And a best score of
+   * zero pays nothing — otherwise a round nobody answered would hand the whole
+   * room a free point.
+   */
+  private awardDuelPoints(room: Room): void {
+    const active = this.getActivePlayers(room);
+    if (active.length === 0) return;
+
+    // Compare on the rounded value the client is shown, so two results that
+    // display as identical actually count as a tie.
+    const score = (player: Player) => Math.round((player.currentAccuracy ?? 0) * 1000);
+    const best = Math.max(...active.map(score));
+    if (best <= 0) return;
+
+    for (const player of active) {
+      if (score(player) === best) player.points++;
+    }
+  }
+
+  /**
+   * Elimination: every `elimEveryRounds` rounds, the weakest player drops out.
+   *
+   * Exactly one player per cycle, never a tie that empties the room — a tie on
+   * the round is broken by the lower running average, then by join order.
+   */
+  private applyElimination(room: Room): { userId: string; username: string } | undefined {
+    const every = Math.max(1, room.config.elimEveryRounds);
+    if (room.currentRound % every !== 0) return undefined;
+
+    const active = this.getActivePlayers(room);
+    // Below two there is nothing left to decide.
+    if (active.length < 2) return undefined;
+
+    const average = (p: Player) => (p.roundsPlayed > 0 ? p.totalAccuracy / p.roundsPlayed : 0);
+    const weakest = active.reduce((lowest, player) => {
+      const byRound = (player.currentAccuracy ?? 0) - (lowest.currentAccuracy ?? 0);
+      if (byRound !== 0) return byRound < 0 ? player : lowest;
+      return average(player) < average(lowest) ? player : lowest;
+    });
+
+    weakest.eliminated = true;
+    weakest.status = 'waiting';
+    return { userId: weakest.userId, username: weakest.username };
   }
 
   getRoundResults(room: Room): RoundResultDTO[] {
@@ -555,14 +690,28 @@ class RoomManager {
             : 0,
         roundsPlayed: player.roundsPlayed,
         totalAccuracy: Math.round(player.totalAccuracy * 1000) / 1000,
+        points: player.points,
+        eliminated: player.eliminated,
       });
     }
-    leaderboard.sort((a, b) => b.averageAccuracy - a.averageAccuracy);
+
+    if (room.config.mode === 'duel') {
+      // Points decide a duel; average accuracy only breaks ties between equal
+      // point totals.
+      leaderboard.sort((a, b) => b.points - a.points || b.averageAccuracy - a.averageAccuracy);
+    } else {
+      leaderboard.sort((a, b) => b.averageAccuracy - a.averageAccuracy);
+    }
     return leaderboard;
   }
 
   /** Why the game should stop, or null to keep playing. */
   getEndReason(room: Room): GameEndReason | null {
+    // Checked before the player-count rule: with three of four knocked out the
+    // room is still full of connected people, but the game is over and won.
+    if (room.config.elimination && room.currentRound > 0 && this.getActiveCount(room) < 2) {
+      return 'last_player_standing';
+    }
     if (this.getConnectedCount(room) < 2) return 'not_enough_players';
     if (room.totalRounds !== null && room.currentRound >= room.totalRounds) return 'rounds_complete';
     return null;
@@ -635,18 +784,59 @@ class RoomManager {
     room.totalRounds = room.config.specificRounds;
     room.currentColor = undefined;
     room.lastColor = undefined;
+    room.startColor = undefined;
+    room.lastEliminated = undefined;
     room.phaseEndsAt = undefined;
     room.roundResults.clear();
     room.playAgainVotes.clear();
+    room.reactions.clear();
 
     for (const player of room.players.values()) {
       if (player.status !== 'disconnected') player.status = 'waiting';
       player.totalAccuracy = 0;
       player.roundsPlayed = 0;
       player.currentAccuracy = undefined;
+      player.points = 0;
+      player.eliminated = false;
     }
 
     return room;
+  }
+
+  // ── Reactions ─────────────────────────────────────────────────────────────
+
+  /**
+   * Set, replace or clear one player's reaction on another's result.
+   *
+   * One reaction each: a second pick replaces the first, and picking the same
+   * emoji again clears it. Returns false when the emoji isn't one of ours.
+   */
+  toggleReaction(room: Room, targetUserId: string, reactorUserId: string, emoji: string): boolean {
+    if (!(REACTION_EMOJIS as readonly string[]).includes(emoji)) return false;
+
+    const existing = room.reactions.get(targetUserId);
+    if (existing?.get(reactorUserId) === emoji) {
+      existing.delete(reactorUserId);
+      if (existing.size === 0) room.reactions.delete(targetUserId);
+      return true;
+    }
+
+    if (existing) existing.set(reactorUserId, emoji);
+    else room.reactions.set(targetUserId, new Map([[reactorUserId, emoji]]));
+    return true;
+  }
+
+  /** Invert the store into emoji → reactors, which is what a row renders from. */
+  serializeReactions(room: Room): ReactionMapDTO {
+    const out: ReactionMapDTO = {};
+    for (const [targetUserId, reactors] of room.reactions) {
+      const byEmoji: Record<string, string[]> = {};
+      for (const [reactorUserId, emoji] of reactors) {
+        (byEmoji[emoji] ??= []).push(reactorUserId);
+      }
+      out[targetUserId] = byEmoji;
+    }
+    return out;
   }
 
   // ── Chat ──────────────────────────────────────────────────────────────────
@@ -680,12 +870,19 @@ class RoomManager {
       color: room.phase === 'memorization' ? room.currentColor ?? null : null,
       // The answer, revealed only once the round is over.
       targetColor: room.phase === 'results' || room.phase === 'ended' ? room.lastColor ?? null : null,
+      // Where the sliders start. Sent through memorization too, so the reconstruction
+      // screen has it the moment it renders rather than a frame later.
+      startColor:
+        room.phase === 'memorization' || room.phase === 'reconstruction' ? room.startColor ?? null : null,
       phaseEndsAt: room.phaseEndsAt ?? null,
       serverTime: Date.now(),
       colorDuration: room.config.colorTimeSeconds,
       roundDuration: room.config.roundTimeSeconds,
       results: room.phase === 'results' || room.phase === 'ended' ? this.getRoundResults(room) : [],
       leaderboard: room.currentRound > 0 ? this.getRoomLeaderboard(room) : [],
+      reactions: this.serializeReactions(room),
+      lastEliminated:
+        room.phase === 'results' || room.phase === 'ended' ? room.lastEliminated ?? null : null,
       chat: room.chat.slice(-MAX_CHAT_HISTORY),
       yourSocketId: forSocketId,
       hasSubmitted: room.roundResults.has(forSocketId),

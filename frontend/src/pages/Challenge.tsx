@@ -14,12 +14,29 @@ import { RoomTopBar } from '../components/multiplayer/RoomTopBar'
 import { FriendsLauncher } from '../components/multiplayer/FriendsModal'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
-import type { RoomConfig } from '../types/multiplayer'
+import type { RoomConfig, RoomMode } from '../types/multiplayer'
 import { RoomSettings } from '../components/multiplayer/RoomSettings'
 
 type View = 'choose' | 'create' | 'join' | 'waiting'
 
-export default function Challenge() {
+/** Lobby copy per mode. The room's own config is what actually scores it. */
+const MODE_COPY: Record<RoomMode, { title: string; blurb: string }> = {
+  challenge: {
+    title: 'Challenge',
+    blurb: 'Play against friends in real time',
+  },
+  duel: {
+    title: 'Duel',
+    blurb: 'A point a round to the closest guess — most points takes it',
+  },
+}
+
+/**
+ * Lobby for both multiplayer modes. `mode` only seeds a room you create here:
+ * joining reads the mode off the room, so a Challenge code pasted into the Duel
+ * lobby correctly joins a Challenge room.
+ */
+export default function Challenge({ mode = 'challenge' }: { mode?: RoomMode }) {
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuth()
@@ -44,6 +61,7 @@ export default function Challenge() {
     connectionMessage,
     retryConnection,
     updateRoomConfig,
+    kickPlayer,
     error: mpError,
   } = useMultiplayer()
 
@@ -237,8 +255,8 @@ export default function Challenge() {
 
       {view === 'choose' && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          <h2 className="font-heading text-section text-center">Challenge</h2>
-          <p className="text-center text-sm text-muted">Play against friends in real time</p>
+          <h2 className="font-heading text-section text-center">{MODE_COPY[mode].title}</h2>
+          <p className="text-center text-sm text-muted">{MODE_COPY[mode].blurb}</p>
           <Button fullWidth onClick={() => setView('create')} disabled={!canAct}>
             Create Room
           </Button>
@@ -253,7 +271,9 @@ export default function Challenge() {
         </motion.div>
       )}
 
-      {view === 'create' && <RoomSetup onCreate={handleCreate} loading={isCreating} disabled={!canAct} />}
+      {view === 'create' && (
+        <RoomSetup onCreate={handleCreate} mode={mode} loading={isCreating} disabled={!canAct} />
+      )}
 
       {view === 'join' && <JoinForm onJoin={handleJoin} loading={isJoining} disabled={!canAct} />}
 
@@ -298,7 +318,9 @@ export default function Challenge() {
                 hostSocketId={currentRoom.hostSocketId}
                 maxPlayers={currentRoom.config.maxPlayers}
                 currentUserId={user.id}
+                showPoints={currentRoom.config.mode === 'duel'}
                 allowFriendRequests
+                onKick={currentPlayer?.isHost ? kickPlayer : undefined}
               />
 
               {showCountdown ? (

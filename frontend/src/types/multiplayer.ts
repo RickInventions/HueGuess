@@ -2,7 +2,14 @@ import type { HSLColor, Difficulty } from './index';
 
 export type PlayerStatus = 'waiting' | 'ready' | 'playing' | 'disconnected';
 export type GamePhase = 'waiting' | 'countdown' | 'memorization' | 'reconstruction' | 'results' | 'ended';
-export type GameEndReason = 'rounds_complete' | 'not_enough_players' | 'host_ended';
+export type GameEndReason =
+  | 'rounds_complete'
+  | 'not_enough_players'
+  | 'host_ended'
+  | 'last_player_standing';
+
+/** How a room scores itself. Duel awards a point per round win; challenge averages accuracy. */
+export type RoomMode = 'challenge' | 'duel';
 
 export interface Player {
   socketId: string;
@@ -12,6 +19,10 @@ export interface Player {
   status: PlayerStatus;
   totalAccuracy: number;
   roundsPlayed: number;
+  /** Duel mode: rounds won. */
+  points: number;
+  /** Elimination mode: knocked out, now a spectator. Outranks `status` in the UI. */
+  eliminated: boolean;
   currentAccuracy?: number;
 }
 
@@ -21,6 +32,12 @@ export interface RoomConfig {
   difficulty: Difficulty;
   specificRounds: number | null; // null = unlimited
   maxPlayers: number;            // 2-8
+  mode: RoomMode;
+  /** Start the reconstruction sliders somewhere random instead of 0/0/0. */
+  sliderShuffle: boolean;
+  /** Battle royale: drop the lowest scorer every `elimEveryRounds` rounds. */
+  elimination: boolean;
+  elimEveryRounds: number;
 }
 
 export interface Room {
@@ -51,9 +68,22 @@ export interface LeaderboardEntry {
   averageAccuracy: number;
   roundsPlayed: number;
   totalAccuracy: number;
+  /** Duel mode: rounds won. Ordering key in duel, decoration elsewhere. */
+  points: number;
+  eliminated: boolean;
   /** Set locally from `play_again_update`, not sent by the server. */
   playedAgain?: boolean;
 }
+
+/**
+ * Reactions on the wire: whose result → emoji → the userIds that picked it.
+ *
+ * Keyed by userId throughout, because socketIds change on reconnect.
+ */
+export type ReactionMap = Record<string, Record<string, string[]>>;
+
+/** The six reactions, in display order. Mirrors REACTION_EMOJIS on the server. */
+export const REACTION_EMOJIS = ['😂', '😭', '🔥', '🤯', '💀', '👀'] as const;
 
 /**
  * The message a reply is answering, quoted inline.
@@ -108,12 +138,17 @@ export interface RoomSnapshot {
   color: HSLColor | null;
   /** The round's answer — only present while results are showing. */
   targetColor: HSLColor | null;
+  /** Where the sliders start this round when slider shuffle is on. */
+  startColor: HSLColor | null;
   phaseEndsAt: number | null;
   serverTime: number;
   colorDuration: number;
   roundDuration: number;
   results: RoundResult[];
   leaderboard: LeaderboardEntry[];
+  reactions: ReactionMap;
+  /** Who elimination knocked out at the end of the round on screen, if anyone. */
+  lastEliminated: { userId: string; username: string } | null;
   chat: ChatMessage[];
   yourSocketId: string;
   hasSubmitted: boolean;

@@ -11,6 +11,7 @@ import {
   JoinRoomInput,
   SubmitColorInput,
   RoomConfig,
+  RoomMode,
   Room,
   SocketUser,
   GameEndReason,
@@ -50,6 +51,32 @@ const MAX_PLAYERS = 8;
  * between two keystrokes.
  */
 const TYPING_TTL_MS = 4_000;
+
+/**
+ * How long before the same person can be invited again by the same sender.
+ *
+ * Enforced here as well as on the client so a second tab, a refresh or a hand-
+ * rolled emit can't sit on one person. The `allow(socket, 'invite', …)` bucket
+ * caps total invite volume; this caps volume aimed at a single player.
+ */
+const INVITE_COOLDOWN_MS = 60_000;
+
+/** `${senderUserId}:${targetUserId}` -> epoch ms at which the pair frees up. */
+const inviteCooldowns: Map<string, number> = new Map();
+
+function inviteCooldownRemaining(senderId: string, targetId: string): number {
+  const now = Date.now();
+  // Swept opportunistically rather than on a timer: the map only grows when
+  // someone invites, so the invite path is exactly where it should be pruned.
+  for (const [key, expiresAt] of inviteCooldowns) {
+    if (expiresAt <= now) inviteCooldowns.delete(key);
+  }
+  return Math.max(0, (inviteCooldowns.get(`${senderId}:${targetId}`) ?? 0) - now);
+}
+
+function startInviteCooldown(senderId: string, targetId: string): void {
+  inviteCooldowns.set(`${senderId}:${targetId}`, Date.now() + INVITE_COOLDOWN_MS);
+}
 
 function getTimers(roomCode: string): RoomTimers {
   let timers = roomTimers.get(roomCode);
@@ -104,6 +131,11 @@ function roomPayload(room: Room) {
 }
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'extreme'];
+const ROOM_MODES: RoomMode[] = ['challenge', 'duel'];
+
+/** Elimination cadence bounds. Keep in sync with the frontend room setup control. */
+const MIN_ELIM_EVERY = 1;
+const MAX_ELIM_EVERY = 5;
 
 /** Validate + normalise a client-supplied room config. Throws with a readable message. */
 function parseConfig(input: Partial<RoomConfig> | undefined): RoomConfig {
@@ -118,6 +150,13 @@ function parseConfig(input: Partial<RoomConfig> | undefined): RoomConfig {
       ? null
       : Math.round(Number(raw.specificRounds));
 
+  // Newer settings default rather than reject, so a client running older code
+  // can still open a room instead of failing validation on a field it never sent.
+  const mode = (raw.mode ?? 'challenge') as RoomMode;
+  const sliderShuffle = raw.sliderShuffle === true;
+  const elimination = raw.elimination === true;
+  const elimEveryRounds = Math.round(Number(raw.elimEveryRounds ?? 2));
+
   if (!Number.isFinite(roundTimeSeconds) || roundTimeSeconds < 10 || roundTimeSeconds > 40) {
     throw new Error('Round time must be between 10 and 40 seconds');
   }
@@ -127,14 +166,36 @@ function parseConfig(input: Partial<RoomConfig> | undefined): RoomConfig {
   if (!DIFFICULTIES.includes(difficulty)) {
     throw new Error('Invalid difficulty');
   }
+  if (!ROOM_MODES.includes(mode)) {
+    throw new Error('Invalid game mode');
+  }
   if (!Number.isFinite(maxPlayers) || maxPlayers < MIN_PLAYERS || maxPlayers > MAX_PLAYERS) {
     throw new Error(`Max players must be between ${MIN_PLAYERS} and ${MAX_PLAYERS}`);
   }
   if (specificRounds !== null && (!Number.isFinite(specificRounds) || specificRounds < 1 || specificRounds > 50)) {
     throw new Error('Specific rounds must be between 1 and 50');
   }
+  if (
+    !Number.isFinite(elimEveryRounds) ||
+    elimEveryRounds < MIN_ELIM_EVERY ||
+    elimEveryRounds > MAX_ELIM_EVERY
+  ) {
+    throw new Error(`Eliminate every N rounds must be between ${MIN_ELIM_EVERY} and ${MAX_ELIM_EVERY}`);
+  }
 
-  return { roundTimeSeconds, colorTimeSeconds, difficulty, specificRounds, maxPlayers };
+  return {
+    roundTimeSeconds,
+    colorTimeSeconds,
+    difficulty,
+    // Elimination derives the round count from how many people are playing, so a
+    // fixed count can't coexist with it.
+    specificRounds: elimination ? null : specificRounds,
+    maxPlayers,
+    mode,
+    sliderShuffle,
+    elimination,
+    elimEveryRounds,
+  };
 }
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,30}$/;
@@ -222,6 +283,9 @@ function beginRound(io: Server, roomCode: string, kind: 'new' | 'next'): void {
     round: room.currentRound,
     totalRounds: room.totalRounds,
     color,
+    // Where the sliders should start (slider shuffle). Sent this early so the
+    // client can seat them during memorization, before they're on screen.
+    startColor: room.startColor ?? null,
     colorDuration: room.config.colorTimeSeconds,
     roundDuration: room.config.roundTimeSeconds,
     phaseEndsAt: room.phaseEndsAt,
@@ -245,6 +309,9 @@ function beginReconstruction(io: Server, roomCode: string): void {
   io.to(roomCode).emit('reconstruction_started', {
     round: room.currentRound,
     roundDuration: room.config.roundTimeSeconds,
+    // Repeated from round_started so a client that joined mid-memorization still
+    // seats its sliders correctly.
+    startColor: room.startColor ?? null,
     phaseEndsAt: room.phaseEndsAt,
     serverTime: Date.now(),
   });
@@ -278,6 +345,8 @@ function endRound(io: Server, roomCode: string): void {
     results,
     leaderboard,
     players: players(room),
+    // Elimination mode: who just went out, so the results screen can announce it.
+    lastEliminated: room.lastEliminated ?? null,
     isFinalRound: !!endReason,
     serverTime: Date.now(),
   });
@@ -327,6 +396,7 @@ const END_MESSAGES: Record<GameEndReason, string> = {
   rounds_complete: 'All rounds complete!',
   not_enough_players: 'Game ended — not enough players',
   host_ended: 'Host ended the session',
+  last_player_standing: 'Last player standing!',
 };
 
 function finishGame(io: Server, roomCode: string, reason: GameEndReason): void {
@@ -355,11 +425,13 @@ function reactToRoomChange(io: Server, roomCode: string): void {
     return;
   }
 
-  const connected = roomManager.getConnectedCount(room);
+  // Active, not connected: an eliminated spectator can't ready up or submit, so
+  // counting them would leave the room waiting on input that cannot arrive.
+  const active = roomManager.getActiveCount(room);
   const inRound = room.phase === 'memorization' || room.phase === 'reconstruction';
 
   if (inRound) {
-    if (connected < 2) {
+    if (active < 2) {
       endRound(io, roomCode); // scores the partial round, then ends the game
       return;
     }
@@ -376,8 +448,10 @@ function reactToRoomChange(io: Server, roomCode: string): void {
   }
 
   if (room.phase === 'results') {
-    if (connected < 2) {
-      finishGame(io, roomCode, 'not_enough_players');
+    if (active < 2) {
+      // getEndReason distinguishes "everyone else was eliminated" from "everyone
+      // else left"; the fallback only ever applies with elimination off.
+      finishGame(io, roomCode, roomManager.getEndReason(room) ?? 'not_enough_players');
       return;
     }
     // Whoever just left may have been the last player anyone was waiting on.
@@ -425,6 +499,7 @@ function scheduleGracePeriod(io: Server, roomCode: string, userId: string): void
       socketId: player.socketId,
       userId: player.userId,
       username: player.username,
+      reason: 'disconnected',
       players: players(updated),
       hostSocketId: roomManager.getHostSocketId(updated),
     });
@@ -867,6 +942,104 @@ export function setupSocketHandlers(io: Server, socket: Socket) {
     });
   });
 
+  // ── Host removes a player ─────────────────────────────────────────────────
+  // Lobby and final-results only. Ejecting someone mid-round would mean unwinding
+  // their submission and the elimination order; the client hides the button there
+  // and this rejects it anyway.
+  on<{ socketId?: unknown }>('kick_player', data => {
+    const targetSocketId = typeof data?.socketId === 'string' ? data.socketId : '';
+    if (!targetSocketId || targetSocketId === socket.id) return;
+
+    if (!allow(socket, 'kick', 10, 30_000)) {
+      emitError(socket, 'Slow down', 'RATE_LIMITED');
+      return;
+    }
+
+    const room = roomManager.getRoomBySocketId(socket.id);
+    if (!room) {
+      emitError(socket, 'You are not in a room', 'NOT_IN_ROOM');
+      return;
+    }
+    if (!room.players.get(socket.id)?.isHost) {
+      emitError(socket, 'Only the host can remove players', 'NOT_HOST');
+      return;
+    }
+    if (room.phase !== 'waiting' && room.phase !== 'ended') {
+      emitError(socket, 'You can only remove players between games', 'GAME_IN_PROGRESS');
+      return;
+    }
+
+    const target = room.players.get(targetSocketId);
+    if (!target) {
+      emitError(socket, 'That player is not in this room', 'PLAYER_NOT_FOUND');
+      return;
+    }
+
+    const roomCode = room.code;
+    const hadCountdown = !!roomTimers.get(roomCode)?.countdown;
+
+    // Their grace timers would otherwise fire against a player who is gone.
+    clearGraceTimers(`${roomCode}:${target.userId}`);
+
+    const { newHostSocketId, roomDeleted } = roomManager.removePlayer(targetSocketId);
+    if (roomDeleted) {
+      clearRoomTimers(roomCode);
+      return;
+    }
+
+    const updated = roomManager.getRoom(roomCode);
+
+    // Emitted to the room while the target is still a member of it — that
+    // broadcast is how they find out, and their client self-detects the userId.
+    io.to(roomCode).emit('player_removed', {
+      socketId: targetSocketId,
+      userId: target.userId,
+      username: target.username,
+      reason: 'kicked',
+      players: players(updated),
+      hostSocketId: roomManager.getHostSocketId(updated),
+    });
+
+    io.sockets.sockets.get(targetSocketId)?.leave(roomCode);
+
+    if (newHostSocketId && updated) {
+      io.to(roomCode).emit('host_changed', {
+        newHostSocketId,
+        newHostUsername: updated.players.get(newHostSocketId)?.username,
+      });
+    }
+
+    if (hadCountdown) cancelCountdown(io, roomCode, `${target.username} was removed`);
+    reactToRoomChange(io, roomCode);
+  });
+
+  // ── Reactions on a round's results ────────────────────────────────────────
+  // One emoji per player per result: sending a different one replaces it, sending
+  // the same one clears it. Spectators may react, and so may you on your own row.
+  on<{ targetUserId?: unknown; emoji?: unknown }>('react_to_result', data => {
+    const targetUserId = typeof data?.targetUserId === 'string' ? data.targetUserId : '';
+    const emoji = typeof data?.emoji === 'string' ? data.emoji : '';
+    if (!targetUserId || !emoji) return;
+
+    if (!allow(socket, 'reaction', 20, 10_000)) return;
+
+    const room = roomManager.getRoomBySocketId(socket.id);
+    if (!room) return;
+    if (room.phase !== 'results' && room.phase !== 'ended') return;
+
+    const me = room.players.get(socket.id);
+    if (!me) return;
+    if (!roomManager.getPlayerByUserId(room, targetUserId)) return;
+
+    // Rejects anything outside the six-emoji allow-list, so an arbitrary string
+    // never reaches the room state and from there every other client.
+    if (!roomManager.toggleReaction(room, targetUserId, me.userId, emoji)) return;
+
+    // The whole map, not a delta: it is a few bytes at this player count, and a
+    // wholesale replace is idempotent, so a dropped event self-heals on the next.
+    io.to(room.code).emit('reactions_update', { reactions: roomManager.serializeReactions(room) });
+  });
+
   // ── Chat ──────────────────────────────────────────────────────────────────
   on<{ message?: unknown; replyTo?: unknown }>('send_message', data => {
     const room = roomManager.getRoomBySocketId(socket.id);
@@ -978,6 +1151,20 @@ export function setupSocketHandlers(io: Server, socket: Socket) {
       }
     }
 
+    // Mid-game elsewhere: an invite they can't act on is just a popup over their
+    // sliders. Same predicate the friends list uses for its "In a game" badge, so
+    // the badge and this rejection can never disagree.
+    const targetRoom = roomManager.getRoomByUserId(targetId);
+    if (targetRoom && targetRoom.phase !== 'waiting' && targetRoom.phase !== 'ended') {
+      emitError(socket, 'They are in the middle of a game', 'TARGET_BUSY');
+      return;
+    }
+
+    if (inviteCooldownRemaining(me.userId, targetId) > 0) {
+      emitError(socket, 'You just invited them — give it a moment', 'INVITE_COOLDOWN');
+      return;
+    }
+
     // Friends only, checked server-side: the client hides the button for
     // non-friends, but the event itself must not be a way to spam strangers.
     void FriendService.areFriends(me.userId, targetId)
@@ -998,7 +1185,15 @@ export function setupSocketHandlers(io: Server, socket: Socket) {
           sentAt: Date.now(),
         });
 
-        socket.emit('invite_sent', { userId: targetId, delivered });
+        // Only a delivered invite starts the clock. A failed one shouldn't lock
+        // the sender out of retrying once the target comes online.
+        if (delivered) startInviteCooldown(me.userId, targetId);
+
+        socket.emit('invite_sent', {
+          userId: targetId,
+          delivered,
+          cooldownMs: delivered ? INVITE_COOLDOWN_MS : 0,
+        });
       })
       .catch(error => {
         console.error('Invite check failed:', error);

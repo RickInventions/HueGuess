@@ -2,11 +2,26 @@ import { Router } from 'express';
 import { FriendService } from '../services/friend.service.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.middleware.js';
 import { getOnlineUserIds, notifyUser } from '../socket/presence.js';
+import { roomManager } from '../socket/roomManager.js';
 
 const router = Router();
 
 // Every friend action is about the caller, so the whole router is authenticated.
 router.use(authMiddleware);
+
+/**
+ * What a friend is busy with, so the list can say so before you invite them.
+ *
+ * Deliberately not the room code: the state is all the UI needs, and the code
+ * would let someone walk into a room they were never invited to.
+ */
+function activityOf(userId: string): 'in_room' | 'in_game' | null {
+  const room = roomManager.getRoomByUserId(userId);
+  if (!room) return null;
+  // `ended` is the post-game results screen — they can walk out of it, so it
+  // still counts as invitable. Same predicate the invite handler rejects on.
+  return room.phase === 'waiting' || room.phase === 'ended' ? 'in_room' : 'in_game';
+}
 
 /** Friends, incoming and outgoing requests, plus who is online right now. */
 router.get('/', async (req: AuthRequest, res) => {
@@ -16,7 +31,11 @@ router.get('/', async (req: AuthRequest, res) => {
 
     res.json({
       success: true,
-      friends: overview.friends.map(friend => ({ ...friend, isOnline: online.has(friend.userId) })),
+      friends: overview.friends.map(friend => ({
+        ...friend,
+        isOnline: online.has(friend.userId),
+        activity: activityOf(friend.userId),
+      })),
       incoming: overview.incoming,
       outgoing: overview.outgoing,
     });

@@ -14,6 +14,7 @@ import type {
   GamePhase,
   GameEndReason,
   LeaderboardEntry,
+  ReactionMap,
   RoomSnapshot,
   SocketErrorPayload,
 } from '../types/multiplayer';
@@ -76,6 +77,12 @@ interface MultiplayerContextType {
   currentColor: HSLColor | null;
   /** The colour of the round just finished — only set while results are showing. */
   targetColor: HSLColor | null;
+  /** Where the sliders start this round when slider shuffle is on. */
+  startColor: HSLColor | null;
+  /** Emoji left on this round's results: whose result → emoji → reactor userIds. */
+  reactions: ReactionMap;
+  /** Elimination mode: who went out at the end of the round on screen. */
+  lastEliminated: { userId: string; username: string } | null;
   /** Seconds left in the current phase, derived from the server deadline. */
   timeRemaining: number | null;
   /** Raw server deadline (epoch ms) for smooth progress animations. */
@@ -106,6 +113,10 @@ interface MultiplayerContextType {
   submitColor: (color: HSLColor) => void;
   playAgain: () => void;
   endRoom: () => void;
+  /** Host only, lobby or final results only — ejects another player. */
+  kickPlayer: (socketId: string) => void;
+  /** Toggle your emoji on someone's result. Sending a different one replaces it. */
+  reactToResult: (targetUserId: string, emoji: string) => void;
   sendMessage: (message: string, replyTo?: ChatReplyTo) => void;
   /** Tell the room you're composing. Throttled internally — call it per keystroke. */
   sendTyping: (isTyping: boolean) => void;
@@ -142,6 +153,9 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
   const [countdown, setCountdown] = useState<number | null>(null);
   const [currentColor, setCurrentColor] = useState<HSLColor | null>(null);
   const [targetColor, setTargetColor] = useState<HSLColor | null>(null);
+  const [startColor, setStartColor] = useState<HSLColor | null>(null);
+  const [reactions, setReactions] = useState<ReactionMap>({});
+  const [lastEliminated, setLastEliminated] = useState<{ userId: string; username: string } | null>(null);
   const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
   const [submittedCount, setSubmittedCount] = useState(0);
   const [totalSubmitters, setTotalSubmitters] = useState(0);
@@ -173,6 +187,9 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     setCountdown(null);
     setCurrentColor(null);
     setTargetColor(null);
+    setStartColor(null);
+    setReactions({});
+    setLastEliminated(null);
     setPhaseEndsAt(null);
     setSubmittedCount(0);
     setTotalSubmitters(0);
@@ -266,6 +283,9 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       setTotalRounds(snap.totalRounds);
       setCurrentColor(snap.color ?? null);
       setTargetColor(snap.targetColor ?? null);
+      setStartColor(snap.startColor ?? null);
+      setReactions(snap.reactions ?? {});
+      setLastEliminated(snap.lastEliminated ?? null);
       setPhaseEndsAt(snap.phaseEndsAt ?? null);
       setRoundResults(snap.results ?? []);
       setLeaderboard(snap.leaderboard ?? []);
@@ -430,17 +450,27 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     const onPlayerRemoved = (data: {
       userId?: string;
       username: string;
+      reason?: 'kicked' | 'disconnected';
       players: Player[];
       hostSocketId: string | null;
     }) => {
+      const kicked = data.reason === 'kicked';
       if (data.userId && user?.id && String(data.userId) === String(user.id)) {
         resetRoom();
-        toast.error('You were removed from the room after losing connection');
+        toast.error(
+          kicked
+            ? 'The host removed you from the room'
+            : 'You were removed from the room after losing connection'
+        );
         return;
       }
       setPlayers(data.players);
       setCurrentRoom(prev => (prev ? { ...prev, players: data.players, hostSocketId: data.hostSocketId } : prev));
-      toast.info(`${data.username} was removed (disconnected too long)`);
+      toast.info(
+        kicked
+          ? `${data.username} was removed by the host`
+          : `${data.username} was removed (disconnected too long)`
+      );
     };
 
     // ── Ready / countdown ───────────────────────────────────────────────────
@@ -466,6 +496,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       round: number;
       totalRounds: number | null;
       color: HSLColor;
+      startColor?: HSLColor | null;
       colorDuration: number;
       roundDuration: number;
       phaseEndsAt: number;
@@ -475,24 +506,35 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       setTotalRounds(data.totalRounds);
       setCurrentColor(data.color);
       setTargetColor(null);
+      setStartColor(data.startColor ?? null);
+      setReactions({});
+      setLastEliminated(null);
       setPhase('memorization');
       setPhaseEndsAt(data.phaseEndsAt ?? null);
       setPlayers(data.players);
       setRoundResults([]);
       setSubmittedCount(0);
       // Reset the denominator too — carrying last round's total over shows a
-      // stale "x of y" until the first submission lands.
-      setTotalSubmitters(data.players.filter(p => p.status !== 'disconnected').length);
+      // stale "x of y" until the first submission lands. Eliminated spectators
+      // are excluded: they can't submit, so they'd never let it read "n of n".
+      setTotalSubmitters(data.players.filter(p => p.status !== 'disconnected' && !p.eliminated).length);
       setHasSubmitted(false);
       setCountdown(null);
       setIsFinalRound(false);
       setError(null);
     };
 
-    const onReconstructionStarted = (data: { roundDuration: number; phaseEndsAt: number }) => {
+    const onReconstructionStarted = (data: {
+      roundDuration: number;
+      phaseEndsAt: number;
+      startColor?: HSLColor | null;
+    }) => {
       setPhase('reconstruction');
       setPhaseEndsAt(data.phaseEndsAt ?? null);
       setCurrentColor(null);
+      // Repeated by the server; honoured here too so a client that missed
+      // round_started still seats its sliders in the right place.
+      if (data.startColor) setStartColor(data.startColor);
     };
 
     const onPlayerSubmitted = (data: { submittedCount: number; totalPlayers: number }) => {
@@ -525,6 +567,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       results: RoundResult[];
       leaderboard: LeaderboardEntry[];
       players: Player[];
+      lastEliminated?: { userId: string; username: string } | null;
       isFinalRound?: boolean;
     }) => {
       setRoundResults(data.results);
@@ -534,11 +577,18 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       setCurrentRound(data.round);
       setCurrentColor(null);
       setTargetColor(data.targetColor ?? null);
+      // A fresh round of results, so last round's reactions no longer apply.
+      setReactions({});
+      setLastEliminated(data.lastEliminated ?? null);
       // Results have no deadline — they hold until everyone readies up.
       setPhaseEndsAt(null);
       setSubmittedCount(0);
       setHasSubmitted(false);
       setIsFinalRound(!!data.isFinalRound);
+    };
+
+    const onReactionsUpdate = (data: { reactions?: ReactionMap }) => {
+      setReactions(data?.reactions ?? {});
     };
 
     const onRoundInterval = (data: { nextRound: number; players: Player[]; totalRounds: number | null }) => {
@@ -727,6 +777,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     socket.on('submit_progress', onSubmitProgress);
     socket.on('submit_ack', onSubmitAck);
     socket.on('round_ended', onRoundEnded);
+    socket.on('reactions_update', onReactionsUpdate);
     socket.on('round_interval', onRoundInterval);
     socket.on('game_ended', onGameEnded);
     socket.on('play_again_update', onPlayAgainUpdate);
@@ -762,6 +813,7 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       socket.off('submit_progress', onSubmitProgress);
       socket.off('submit_ack', onSubmitAck);
       socket.off('round_ended', onRoundEnded);
+      socket.off('reactions_update', onReactionsUpdate);
       socket.off('round_interval', onRoundInterval);
       socket.off('game_ended', onGameEnded);
       socket.off('play_again_update', onPlayAgainUpdate);
@@ -950,6 +1002,29 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     socket.emit('end_room');
   }, [socket]);
 
+  const kickPlayer = useCallback(
+    (socketId: string) => {
+      if (!socket?.connected) {
+        toast.error('Not connected — nobody was removed');
+        return;
+      }
+      // Host, phase and membership are all re-checked server-side; this is only
+      // the send. A rejection comes back as the usual `error` toast.
+      socket.emit('kick_player', { socketId });
+    },
+    [socket]
+  );
+
+  const reactToResult = useCallback(
+    (targetUserId: string, emoji: string) => {
+      if (!socket?.connected || !targetUserId || !emoji) return;
+      // No optimistic update: the server echoes the whole map straight back, and
+      // guessing at the toggle would flicker whenever two people react at once.
+      socket.emit('react_to_result', { targetUserId, emoji });
+    },
+    [socket]
+  );
+
   /** When we last told the room we were typing — throttles the outgoing signal. */
   const lastTypingSentAt = useRef(0);
 
@@ -1013,6 +1088,9 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
         countdown,
         currentColor,
         targetColor,
+        startColor,
+        reactions,
+        lastEliminated,
         timeRemaining,
         phaseEndsAt,
         submittedCount,
@@ -1038,6 +1116,8 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
         submitColor,
         playAgain,
         endRoom,
+        kickPlayer,
+        reactToResult,
         sendMessage,
         sendTyping,
         resetRoom,

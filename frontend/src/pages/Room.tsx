@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Trophy, Check, Users, Loader2 } from 'lucide-react'
+import { Send, Trophy, Check, Users, Loader2, Skull } from 'lucide-react'
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useMultiplayer } from '../hooks/useMultiplayer'
 import { useSocket } from '../context/SocketContext'
@@ -62,12 +62,22 @@ export default function Room() {
     setReady,
     joinRoom,
     updateRoomConfig,
+    startColor,
+    reactions,
+    lastEliminated,
+    kickPlayer,
+    reactToResult,
   } = useMultiplayer()
 
-  const [userColor, setUserColor] = useState<HSLColor>({ h: 0, s: 0, l: 0 })
+  /** Where the sliders sit at the start of a round — shuffled by the room, or 0/0/0. */
+  const sliderStart = useMemo<HSLColor>(() => startColor ?? { h: 0, s: 0, l: 0 }, [startColor])
+
+  const [userColor, setUserColor] = useState<HSLColor>(() => startColor ?? { h: 0, s: 0, l: 0 })
   const autoSubmittedRef = useRef<number | null>(null)
   const enteredReconstructionRef = useRef<number | null>(null)
   const deepLinkTried = useRef(false)
+  /** Has the player moved a slider this round? Guards the shuffled-start adoption. */
+  const touchedRef = useRef(false)
 
   const canAct = isConnected && isOnline
 
@@ -76,6 +86,15 @@ export default function Room() {
   const isHost = currentPlayer?.isHost ?? false
   const isReady = currentPlayer?.status === 'ready'
   const connectedPlayers = useMemo(() => players.filter(p => p.status !== 'disconnected'), [players])
+  // Who the game is actually waiting on: spectators can't ready up or submit, so
+  // counting them would leave every gate permanently one player short.
+  const activePlayers = useMemo(() => connectedPlayers.filter(p => !p.eliminated), [connectedPlayers])
+  // Knocked out of an elimination game: still in the room, still in chat, but no
+  // sliders and no ready gate — they watch the rest play it out.
+  const isSpectator = currentPlayer?.eliminated ?? false
+  const isDuel = currentRoom?.config.mode === 'duel'
+  /** Host controls only where the server accepts them: lobby and final results. */
+  const kickHandler = isHost ? kickPlayer : undefined
 
   const timeLeft = timeRemaining !== null ? Math.max(0, Math.ceil(timeRemaining)) : 0
   const totalTime =
@@ -140,16 +159,28 @@ export default function Room() {
   // ── Round reset ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (phase === 'memorization') {
-      setUserColor({ h: 0, s: 0, l: 0 })
+      setUserColor(sliderStart)
+      touchedRef.current = false
       autoSubmittedRef.current = null
     }
-  }, [phase, currentRound])
+  }, [phase, currentRound, sliderStart])
+
+  /**
+   * Adopt the round's shuffled start whenever it arrives and the player hasn't
+   * moved anything yet. This is what restores the start after a reload lands
+   * mid-reconstruction, where the reset effect above never runs — and it can't
+   * overwrite a guess in progress because the first drag marks the sliders dirty.
+   */
+  useEffect(() => {
+    if (touchedRef.current) return
+    setUserColor(sliderStart)
+  }, [sliderStart])
 
   const handleSubmit = useCallback(() => {
-    if (hasSubmitted || phase !== 'reconstruction') return
+    if (hasSubmitted || phase !== 'reconstruction' || isSpectator) return
     submitColor(userColor)
     soundService.playSubmitDing()
-  }, [hasSubmitted, phase, submitColor, userColor])
+  }, [hasSubmitted, phase, isSpectator, submitColor, userColor])
 
   // Latest slider position, read at auto-submit time. A ref rather than a dep so
   // dragging the sliders doesn't tear down and re-arm the timer below.
@@ -168,7 +199,7 @@ export default function Room() {
   // active when it was computed, and acting on it fired the instant a round
   // opened on slower connections.
   useEffect(() => {
-    if (phase !== 'reconstruction' || hasSubmitted) return
+    if (phase !== 'reconstruction' || hasSubmitted || isSpectator) return
     if (phaseEndsAt === null) return
     if (autoSubmittedRef.current === currentRound) return
 
@@ -191,6 +222,7 @@ export default function Room() {
     phase,
     phaseEndsAt,
     hasSubmitted,
+    isSpectator,
     currentRound,
     getServerTime,
     submitColor,
@@ -273,6 +305,23 @@ export default function Room() {
     </RoomTopBar>
   )
 
+  /**
+   * Stands in for the sliders and the ready button once you're knocked out. Said
+   * with an icon and a heading rather than a disabled control: an eliminated
+   * player isn't waiting for permission, they're watching.
+   */
+  const spectatorBanner = (
+    <div className="flex items-start gap-3 rounded-card border border-deep/20 bg-surface-alt p-4">
+      <Skull className="mt-0.5 h-5 w-5 shrink-0 text-deep" />
+      <div className="min-w-0 space-y-0.5">
+        <p className="font-heading text-sm font-semibold text-deep">You're out</p>
+        <p className="text-xs text-muted">
+          Spectating the rest of the game — you can still chat and react to results.
+        </p>
+      </div>
+    </div>
+  )
+
   // ── Still resolving a deep link ───────────────────────────────────────────
   if (!currentRoom) {
     return (
@@ -290,7 +339,7 @@ export default function Room() {
   // ── WAITING (lobby between rounds) ────────────────────────────────────────
   if (phase === 'waiting') {
     const showCountdown = countdown !== null && countdown > 0
-    const allReady = connectedPlayers.length >= 2 && connectedPlayers.every(p => p.status === 'ready')
+    const allReady = activePlayers.length >= 2 && activePlayers.every(p => p.status === 'ready')
     const roundLabel = currentRound === 0 ? 'Get Ready' : `Round ${currentRound} of ${totalRounds ?? '∞'}`
 
     return (
@@ -316,7 +365,9 @@ export default function Room() {
               maxPlayers={currentRoom.config.maxPlayers}
               currentUserId={user?.id}
               showScores={currentRound > 0}
+              showPoints={isDuel}
               allowFriendRequests
+              onKick={kickHandler}
             />
 
             {/* Editable only before round 1 — the server enforces the same window,
@@ -342,25 +393,29 @@ export default function Room() {
               </motion.div>
             ) : (
               <div className="space-y-3">
-                {connectedPlayers.length < 2 && (
-                  <p className="text-center text-xs text-accent">Need at least 2 connected players</p>
+                {activePlayers.length < 2 && (
+                  <p className="text-center text-xs text-accent">Need at least 2 players still in</p>
                 )}
-                {connectedPlayers.length >= 2 && !allReady && (
+                {activePlayers.length >= 2 && !allReady && (
                   <p className="text-center text-xs text-muted">Waiting for all players to ready up…</p>
                 )}
 
+                {isSpectator && spectatorBanner}
+
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <Button
-                    fullWidth
-                    variant={isReady ? 'secondary' : 'primary'}
-                    onClick={handleToggleReady}
-                    disabled={!canAct}
-                    icon={isReady ? <Check className="w-4 h-4" /> : undefined}
-                  >
-                    {isReady ? 'Unready' : 'Ready'}
-                  </Button>
+                  {!isSpectator && (
+                    <Button
+                      fullWidth
+                      variant={isReady ? 'secondary' : 'primary'}
+                      onClick={handleToggleReady}
+                      disabled={!canAct}
+                      icon={isReady ? <Check className="w-4 h-4" /> : undefined}
+                    >
+                      {isReady ? 'Unready' : 'Ready'}
+                    </Button>
+                  )}
                   {isHost && (
-                    <Button variant="ghost" onClick={endRoom} disabled={!canAct}>
+                    <Button variant="ghost" fullWidth={isSpectator} onClick={endRoom} disabled={!canAct}>
                       End Session
                     </Button>
                   )}
@@ -397,14 +452,22 @@ export default function Room() {
             "good game" and agree on another round. */}
         <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
           <div className="space-y-6">
-            <RoomLeaderboard entries={leaderboard} rounds={currentRound} currentUserId={user?.id} showVotes />
+            <RoomLeaderboard
+              entries={leaderboard}
+              rounds={currentRound}
+              currentUserId={user?.id}
+              showPoints={isDuel}
+              showVotes
+            />
 
             <PlayerList
               players={players}
               hostSocketId={currentRoom.hostSocketId}
               maxPlayers={currentRoom.config.maxPlayers}
               currentUserId={user?.id}
+              showPoints={isDuel}
               allowFriendRequests
+              onKick={kickHandler}
             />
 
             <div className="space-y-3">
@@ -432,9 +495,9 @@ export default function Room() {
 
   // ── RESULTS ───────────────────────────────────────────────────────────────
   if (phase === 'results') {
-    const readyCount = connectedPlayers.filter(p => p.status === 'ready').length
-    const enoughPlayers = connectedPlayers.length >= 2
-    const waitingOn = connectedPlayers.length - readyCount
+    const readyCount = activePlayers.filter(p => p.status === 'ready').length
+    const enoughPlayers = activePlayers.length >= 2
+    const waitingOn = activePlayers.length - readyCount
 
     return (
       <div className="max-w-game lg:max-w-4xl mx-auto px-4 py-6 space-y-6">
@@ -454,8 +517,36 @@ export default function Room() {
               targetColor={targetColor}
               currentUserId={user?.id}
               round={currentRound}
+              showPoints={isDuel}
+              reactions={reactions}
+              onReact={canAct ? reactToResult : undefined}
             />
-            <RoomLeaderboard entries={leaderboard} rounds={currentRound} currentUserId={user?.id} />
+
+            {/* The round's other consequence. Announced here rather than only on
+                the player card, because it decides who is still in the game. */}
+            {lastEliminated && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center justify-center gap-2 rounded-card border border-deep/20 bg-surface-alt px-4 py-3"
+              >
+                <Skull className="w-4 h-4 shrink-0 text-deep" />
+                <p className="text-sm text-deep">
+                  <span className="font-semibold">
+                    {lastEliminated.userId === user?.id ? 'You' : lastEliminated.username}
+                  </span>
+                  {lastEliminated.userId === user?.id ? ' are out' : ' is out'} — lowest accuracy this
+                  round
+                </p>
+              </motion.div>
+            )}
+
+            <RoomLeaderboard
+              entries={leaderboard}
+              rounds={currentRound}
+              currentUserId={user?.id}
+              showPoints={isDuel}
+            />
 
             {isFinalRound ? (
               <p className="flex items-center justify-center gap-2 text-center text-sm text-muted">
@@ -476,7 +567,7 @@ export default function Room() {
                         enoughPlayers && waitingOn === 0 ? 'text-success' : 'text-muted'
                       }`}
                     >
-                      {readyCount}/{connectedPlayers.length} ready
+                      {readyCount}/{activePlayers.length} ready
                     </span>
                   </div>
 
@@ -485,13 +576,14 @@ export default function Room() {
                     hostSocketId={currentRoom.hostSocketId}
                     maxPlayers={currentRoom.config.maxPlayers}
                     currentUserId={user?.id}
-                    showScores
+                    showScores={!isDuel}
+                    showPoints={isDuel}
                     allowFriendRequests
                   />
 
                   <p className="text-center text-xs text-muted">
                     {!enoughPlayers
-                      ? 'Need at least 2 connected players to continue'
+                      ? 'Need at least 2 players still in to continue'
                       : waitingOn > 0
                         ? `Waiting on ${waitingOn} ${waitingOn === 1 ? 'player' : 'players'} to ready up`
                         : 'Everyone is ready — starting…'}
@@ -499,15 +591,19 @@ export default function Room() {
                 </div>
 
                 <div className="space-y-3">
-                  <Button
-                    fullWidth
-                    variant={isReady ? 'secondary' : 'primary'}
-                    onClick={handleToggleReady}
-                    disabled={!canAct}
-                    icon={isReady ? <Check className="w-4 h-4" /> : undefined}
-                  >
-                    {isReady ? 'Unready' : 'Ready for Next Round'}
-                  </Button>
+                  {isSpectator ? (
+                    spectatorBanner
+                  ) : (
+                    <Button
+                      fullWidth
+                      variant={isReady ? 'secondary' : 'primary'}
+                      onClick={handleToggleReady}
+                      disabled={!canAct}
+                      icon={isReady ? <Check className="w-4 h-4" /> : undefined}
+                    >
+                      {isReady ? 'Unready' : 'Ready for Next Round'}
+                    </Button>
+                  )}
                   {isHost && (
                     <Button variant="ghost" fullWidth onClick={endRoom} disabled={!canAct}>
                       End Session
@@ -547,7 +643,7 @@ export default function Room() {
             <div className="flex items-center justify-end text-xs">
               <span className="inline-flex items-center gap-1.5 text-muted">
                 <Users className="w-3.5 h-3.5" />
-                {submittedCount}/{totalSubmitters || connectedPlayers.length} submitted
+                {submittedCount}/{totalSubmitters || activePlayers.length} submitted
               </span>
             </div>
           )}
@@ -581,24 +677,33 @@ export default function Room() {
                 transition={{ duration: 0.3 }}
                 className="space-y-6"
               >
-                <ColorSliders
-                  color={userColor}
-                  onChange={(channel, value) => setUserColor(prev => ({ ...prev, [channel]: value }))}
-                  disabled={hasSubmitted}
-                  onSubmit={handleSubmit}
-                />
-                <Button
-                  fullWidth
-                  onClick={handleSubmit}
-                  disabled={hasSubmitted || !canAct}
-                  icon={<Send className="w-4 h-4" />}
-                >
-                  {hasSubmitted ? 'Submitted ✓' : 'Submit Guess'}
-                </Button>
-                {hasSubmitted && (
-                  <p className="text-center text-sm text-muted">
-                    Waiting for the other players…
-                  </p>
+                {isSpectator ? (
+                  spectatorBanner
+                ) : (
+                  <>
+                    <ColorSliders
+                      color={userColor}
+                      onChange={(channel, value) => {
+                        touchedRef.current = true
+                        setUserColor(prev => ({ ...prev, [channel]: value }))
+                      }}
+                      disabled={hasSubmitted}
+                      onSubmit={handleSubmit}
+                    />
+                    <Button
+                      fullWidth
+                      onClick={handleSubmit}
+                      disabled={hasSubmitted || !canAct}
+                      icon={<Send className="w-4 h-4" />}
+                    >
+                      {hasSubmitted ? 'Submitted ✓' : 'Submit Guess'}
+                    </Button>
+                    {hasSubmitted && (
+                      <p className="text-center text-sm text-muted">
+                        Waiting for the other players…
+                      </p>
+                    )}
+                  </>
                 )}
               </motion.div>
             )}
@@ -611,7 +716,8 @@ export default function Room() {
             hostSocketId={currentRoom.hostSocketId}
             maxPlayers={currentRoom.config.maxPlayers}
             currentUserId={user?.id}
-            showScores
+            showScores={!isDuel}
+            showPoints={isDuel}
           />
           {/* Rendered at every breakpoint — mid-game chat used to be desktop-only. */}
           <ChatPanel

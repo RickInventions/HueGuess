@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Crown, Check } from 'lucide-react'
+import { Crown, Check, Skull } from 'lucide-react'
 import type { LeaderboardEntry } from '../../types/multiplayer'
 
 interface RoomLeaderboardProps {
@@ -8,10 +8,23 @@ interface RoomLeaderboardProps {
   currentUserId?: string
   /** Show the play-again vote ticks (post-game view only). */
   showVotes?: boolean
+  /** Duel mode: rank on rounds won, with accuracy demoted to the tiebreak. */
+  showPoints?: boolean
 }
 
-export function RoomLeaderboard({ entries, rounds, currentUserId, showVotes = false }: RoomLeaderboardProps) {
-  const sorted = [...entries].sort((a, b) => b.averageAccuracy - a.averageAccuracy)
+export function RoomLeaderboard({
+  entries,
+  rounds,
+  currentUserId,
+  showVotes = false,
+  showPoints = false,
+}: RoomLeaderboardProps) {
+  // Mirrors the server's ordering so the list doesn't reshuffle on arrival.
+  const sorted = [...entries].sort((a, b) =>
+    showPoints && b.points !== a.points
+      ? b.points - a.points
+      : b.averageAccuracy - a.averageAccuracy
+  )
 
   return (
     <div className="space-y-3">
@@ -49,6 +62,12 @@ export function RoomLeaderboard({ entries, rounds, currentUserId, showVotes = fa
                 {entry.username}
                 {isYou && <span className="ml-1.5 text-[10px] uppercase tracking-wide text-primary">You</span>}
               </p>
+              {entry.eliminated && (
+                <span className="inline-flex items-center gap-1 text-xs text-deep">
+                  <Skull className="w-3 h-3" />
+                  Eliminated
+                </span>
+              )}
               {showVotes && entry.playedAgain && (
                 <span className="inline-flex items-center gap-1 text-xs text-success">
                   <Check className="w-3 h-3" />
@@ -57,11 +76,24 @@ export function RoomLeaderboard({ entries, rounds, currentUserId, showVotes = fa
               )}
             </div>
 
+            {/* In duel the points are the standing; accuracy stays visible as the
+                tiebreak it actually is. */}
             <div className="text-right shrink-0">
-              <span className="font-heading font-semibold text-sm">{entry.averageAccuracy.toFixed(2)}%</span>
-              <p className="text-xs text-muted">
-                {entry.roundsPlayed} round{entry.roundsPlayed !== 1 ? 's' : ''}
-              </p>
+              {showPoints ? (
+                <>
+                  <span className="font-heading font-semibold text-sm">
+                    {entry.points} {entry.points === 1 ? 'pt' : 'pts'}
+                  </span>
+                  <p className="text-xs text-muted font-mono">{entry.averageAccuracy.toFixed(1)}% avg</p>
+                </>
+              ) : (
+                <>
+                  <span className="font-heading font-semibold text-sm">{entry.averageAccuracy.toFixed(2)}%</span>
+                  <p className="text-xs text-muted">
+                    {entry.roundsPlayed} round{entry.roundsPlayed !== 1 ? 's' : ''}
+                  </p>
+                </>
+              )}
             </div>
           </motion.div>
         )
