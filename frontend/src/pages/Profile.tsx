@@ -334,7 +334,7 @@ export default function Profile() {
   const hiddenCount = otherUnlocked.length - restUnlocked.length
 
   const inputClass =
-    'w-full rounded-button border border-border bg-surface-alt px-4 py-3 text-base sm:text-sm text-deep placeholder:text-muted focus:outline-none focus:shadow-glow-primary'
+    'w-full rounded-button border border-border bg-surface-alt px-4 py-3   sm:text-sm text-deep placeholder:text-muted focus:outline-none focus:shadow-glow-primary'
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 px-4 py-6 sm:py-8">

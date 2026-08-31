@@ -291,7 +291,7 @@ export default function Game() {
                   <button
                     onClick={handleSubmit}
                     disabled={isSubmitting}
-                    className="w-full bg-gradient-to-r from-primary to-accent text-white py-3 sm:py-4 rounded-xl font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 text-sm sm:text-base touch-manipulation"
+                    className="w-full bg-gradient-to-r from-primary to-accent text-white py-3 sm:py-4 rounded-xl font-semibold hover:opacity-90 active:scale-[0.98] transition-all disabled:opacity-50 text-sm sm:  touch-manipulation"
                   >
                     {isSubmitting ? 'Submitting...' : 'Submit Guess'}
                   </button>
@@ -312,7 +312,7 @@ export default function Game() {
                   <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                     <button
                       onClick={handleRetry}
-                      className="w-full sm:flex-1 bg-gradient-to-r from-primary to-accent text-white py-3 sm:py-4 rounded-xl font-semibold hover:opacity-90 active:scale-[0.98] transition-all text-sm sm:text-base touch-manipulation"
+                      className="w-full sm:flex-1 bg-gradient-to-r from-primary to-accent text-white py-3 sm:py-4 rounded-xl font-semibold hover:opacity-90 active:scale-[0.98] transition-all text-sm sm:  touch-manipulation"
                     >
                       <RefreshCw className="w-4 h-4 inline mr-2" />
                       Play Again

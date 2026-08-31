@@ -295,7 +295,7 @@ export function ChatPanel({
           maxLength={200}
           aria-label="Chat message"
           disabled={!canSend}
-          // text-base below sm stops iOS Safari zooming the page on focus, which
+          //   below sm stops iOS Safari zooming the page on focus, which
           // it does to any field under 16px.
           className="flex-1 min-w-0 px-3 py-2 rounded-button bg-surface-alt border border-border sm:text-sm focus:outline-none focus:shadow-glow-primary disabled:opacity-50"
         />

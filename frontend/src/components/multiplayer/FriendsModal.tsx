@@ -426,7 +426,7 @@ export function FriendsModal({ open, onClose, inRoom = false, initialTab = 'frie
                 placeholder="Search by username"
                 autoComplete="off"
                 // 16px minimum: anything smaller makes iOS Safari zoom the page on focus.
-                className="w-full rounded-button border border-border bg-surface-alt py-2.5 pl-9 pr-9 text-base sm:text-sm text-deep placeholder:text-muted focus:border-primary/40 focus:outline-none"
+                className="w-full rounded-button border border-border bg-surface-alt py-2.5 pl-9 pr-9   sm:text-sm text-deep placeholder:text-muted focus:border-primary/40 focus:outline-none"
               />
               {searching && (
                 <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary" />

@@ -352,7 +352,7 @@ export default function Leaderboard() {
                 autoComplete="off"
                 aria-label="Search the leaderboard by username"
                 // 16px on phones: anything smaller makes iOS Safari zoom on focus.
-                className="w-full rounded-button border border-border bg-surface-alt py-2.5 pl-9 pr-9 text-base text-deep placeholder:text-muted focus:border-primary/40 focus:outline-none sm:text-sm"
+                className="w-full rounded-button border border-border bg-surface-alt py-2.5 pl-9 pr-9   text-deep placeholder:text-muted focus:border-primary/40 focus:outline-none sm:text-sm"
               />
               {search && (
                 <button
@@ -523,7 +523,7 @@ export default function Leaderboard() {
                       className={`p-3.5 ${isYou ? 'bg-primary/[0.06]' : ''}`}
                     >
                       <div className="flex items-start gap-2.5">
-                        <span className="mt-0.5 w-9 shrink-0 font-mono text-base font-bold text-deep">
+                        <span className="mt-0.5 w-9 shrink-0 font-mono   font-bold text-deep">
                           {medal ?? `#${entry.rank}`}
                         </span>
                         <div className="min-w-0 flex-1">

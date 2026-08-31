@@ -347,7 +347,7 @@ export default function Achievements() {
             </div>
           )}
 
-          {/* Controls. The search field is text-base below sm so iOS Safari does
+          {/* Controls. The search field is   below sm so iOS Safari does
               not zoom the page when it gets focus. */}
           <div className="mb-4 flex flex-col gap-3">
             <div className="flex flex-col gap-2 sm:flex-row">

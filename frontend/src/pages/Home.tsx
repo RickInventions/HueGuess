@@ -360,7 +360,7 @@ export default function Home() {
                       handleSearch(e.target.value)
                     }}
                     onFocus={() => searchQuery && setShowSearchDropdown(true)}
-                    className="w-full pl-10 pr-4 py-3 rounded-button bg-surface-alt border border-border text-base sm:text-sm focus:outline-none focus:shadow-glow-primary transition-shadow"
+                    className="w-full pl-10 pr-4 py-3 rounded-button bg-surface-alt border border-border   sm:text-sm focus:outline-none focus:shadow-glow-primary transition-shadow"
                   />
                   {searching && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">

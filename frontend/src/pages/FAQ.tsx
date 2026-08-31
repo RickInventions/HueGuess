@@ -465,7 +465,7 @@ export default function FAQ() {
           <h1 className="font-heading text-3xl sm:text-4xl md:text-5xl font-bold text-deep mb-3">
             Frequently asked questions
           </h1>
-          <p className="text-muted text-sm sm:text-base max-w-xl mx-auto">
+          <p className="text-muted text-sm sm:  max-w-xl mx-auto">
             How scoring, ranks, rooms and friends actually work. Still stuck?{' '}
             <Link to="/support" className="text-primary font-medium hover:underline">
               Contact support
@@ -488,8 +488,8 @@ export default function FAQ() {
             onChange={event => setSearch(event.target.value)}
             placeholder="Search the FAQ…"
             aria-label="Search the FAQ"
-            /* text-base on mobile: anything smaller makes iOS Safari zoom on focus. */
-            className="w-full rounded-button border border-border bg-surface py-3 pl-11 pr-11 text-base sm:text-sm text-deep shadow-card placeholder:text-muted focus:border-primary/40 focus:outline-none focus:shadow-glow-primary"
+            /*   on mobile: anything smaller makes iOS Safari zoom on focus. */
+            className="w-full rounded-button border border-border bg-surface py-3 pl-11 pr-11   sm:text-sm text-deep shadow-card placeholder:text-muted focus:border-primary/40 focus:outline-none focus:shadow-glow-primary"
           />
           {search && (
             <button
@@ -521,7 +521,7 @@ export default function FAQ() {
                   <span className="[&>svg]:h-3.5 [&>svg]:w-3.5">{category.icon}</span>
                   {category.name}
                 </div>
-                <h3 className="font-heading text-base font-semibold text-black">{item.question}</h3>
+                <h3 className="font-heading   font-semibold text-black">{item.question}</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-muted">{item.answer}</p>
                 {item.extra}
               </div>
@@ -570,7 +570,7 @@ export default function FAQ() {
                         {category.icon}
                       </div>
                       <div className="min-w-0">
-                        <h2 className="font-heading text-base sm:text-lg font-semibold text-deep">
+                        <h2 className="font-heading   sm:text-lg font-semibold text-deep">
                           {category.name}
                         </h2>
                         <p className="truncate text-xs text-muted">

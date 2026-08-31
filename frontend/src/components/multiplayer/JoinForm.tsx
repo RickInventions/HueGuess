@@ -65,7 +65,7 @@ export function JoinForm({ onJoin, loading, disabled, initialCode = '' }: JoinFo
             onChange={(e) => setCode(clean(e.target.value))}
             onBlur={() => setTouched(true)}
             maxLength={CODE_LENGTH}
-            className="w-full pl-11 pr-12 py-3 rounded-button bg-surface-alt border border-border text-deep text-center text-base sm:text-lg tracking-[0.2em] sm:tracking-[0.25em] font-mono placeholder:text-muted focus:outline-none focus:shadow-glow-primary transition-shadow"
+            className="w-full pl-11 pr-12 py-3 rounded-button bg-surface-alt border border-border text-deep text-center   sm:text-lg tracking-[0.2em] sm:tracking-[0.25em] font-mono placeholder:text-muted focus:outline-none focus:shadow-glow-primary transition-shadow"
           />
           <button
             type="button"

@@ -18,7 +18,7 @@ const sizes = {
 const iconSizes = {
   xs: 'text-[10px]',
   sm: 'text-xs',
-  md: 'text-base',
+  md: ' ',
 }
 
 /**
