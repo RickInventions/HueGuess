@@ -20,11 +20,14 @@ export function RoomLeaderboard({
   showPoints = false,
 }: RoomLeaderboardProps) {
   // Mirrors the server's ordering so the list doesn't reshuffle on arrival.
-  const sorted = [...entries].sort((a, b) =>
-    showPoints && b.points !== a.points
-      ? b.points - a.points
-      : b.averageAccuracy - a.averageAccuracy
-  )
+  // Eliminated players are no longer placed: they sit below everyone still in,
+  // ordered by how long they lasted.
+  const sorted = [...entries].sort((a, b) => {
+    if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1
+    if (a.eliminated && b.eliminated) return (b.eliminatedRound ?? 0) - (a.eliminatedRound ?? 0)
+    if (showPoints && b.points !== a.points) return b.points - a.points
+    return b.averageAccuracy - a.averageAccuracy
+  })
 
   return (
     <div className="space-y-3">
@@ -50,7 +53,7 @@ export function RoomLeaderboard({
             }`}
           >
             <div className="w-7 sm:w-8 text-center shrink-0">
-              {i === 0 ? (
+              {i === 0 && !entry.eliminated ? (
                 <Crown className="w-5 h-5 text-yellow-500 mx-auto" />
               ) : (
                 <span className="text-sm font-medium text-muted">#{i + 1}</span>
@@ -66,6 +69,7 @@ export function RoomLeaderboard({
                 <span className="inline-flex items-center gap-1 text-xs text-deep">
                   <Skull className="w-3 h-3" />
                   Eliminated
+                  {entry.eliminatedRound ? ` · round ${entry.eliminatedRound}` : ''}
                 </span>
               )}
               {showVotes && entry.playedAgain && (
@@ -77,9 +81,14 @@ export function RoomLeaderboard({
             </div>
 
             {/* In duel the points are the standing; accuracy stays visible as the
-                tiebreak it actually is. */}
+                tiebreak it actually is. Eliminated players carry no score at all —
+                they stopped being in the running, so there is nothing to rank. */}
             <div className="text-right shrink-0">
-              {showPoints ? (
+              {entry.eliminated ? (
+                <span className="font-heading text-sm font-semibold text-deep" aria-label="No score — eliminated">
+                  —
+                </span>
+              ) : showPoints ? (
                 <>
                   <span className="font-heading font-semibold text-sm">
                     {entry.points} {entry.points === 1 ? 'pt' : 'pts'}

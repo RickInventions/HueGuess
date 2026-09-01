@@ -30,8 +30,13 @@ const MAX_DURATION_MS = 12_000;
  * colour they just saw while another is still reconstructing it. The recorder is
  * hidden client-side too, but a hidden button is not a security boundary, so the
  * check that matters is this one.
+ *
+ * `countdown` is open because it is the three seconds *between* the lobby and
+ * the round: a note started while the room was waiting used to be rejected on
+ * arrival if the last player readied up mid-recording, which looked like the
+ * note had simply vanished. Nothing is on screen to coach about yet.
  */
-const OPEN_PHASES = new Set(['waiting', 'results', 'ended']);
+const OPEN_PHASES = new Set(['waiting', 'countdown', 'results', 'ended']);
 
 /** userId → timestamps of recent uploads, for a crude per-user rate limit. */
 const recent = new Map<string, number[]>();

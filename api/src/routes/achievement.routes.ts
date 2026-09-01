@@ -25,10 +25,11 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
 
     // In parallel: getUserAchievements syncs first, and the rest only read, so
     // there is no ordering requirement between them.
-    const [achievements, stats, unseenCount, recent, showcase] = await Promise.all([
+    const [achievements, stats, unseenCount, unseenKeys, recent, showcase] = await Promise.all([
       AchievementService.getUserAchievements(userId),
       AchievementService.getAchievementStats(userId),
       AchievementService.getUnseenCount(userId),
+      AchievementService.getUnseenKeys(userId),
       AchievementService.getRecentUnlocked(userId, 10),
       AchievementService.getShowcase(userId),
     ]);
@@ -38,6 +39,7 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
       ...achievements,
       stats,
       unseenCount,  // NEW - number for badge
+      unseenKeys,   // which ones to float to the top and highlight
       recent,
       showcase,
     });

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Coffee, Swords, ArrowRight, Trophy, User, Users, Calendar,
-  Search, Medal, TrendingUp, Crown, Lock, Flame
+  Search, Medal, TrendingUp, Crown, Lock
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -97,7 +97,9 @@ const MODES: Mode[] = [
   {
     key: 'challenge',
     name: 'Challenge',
-    blurb: 'Real-time multiplayer.',
+    // Point and percentage scoring both live in here, chosen when a room is
+    // created — four modes on this page, not five.
+    blurb: 'Real-time multiplayer, scored on points or percentage.',
     signedOutBlurb: 'Sign in to play with friends.',
     Icon: Users,
     to: '/challenge',
@@ -106,19 +108,6 @@ const MODES: Mode[] = [
     border: 'border-l-success',
     chip: 'bg-success/10 group-hover:bg-success/20',
     tint: 'text-success',
-  },
-  {
-    key: 'duel',
-    name: 'Duel',
-    blurb: 'A point a round to the closest guess.',
-    signedOutBlurb: 'Sign in to duel your friends.',
-    Icon: Flame,
-    to: '/duel',
-    signedOutTo: '/login?redirect=/duel',
-    gated: true,
-    border: 'border-l-deep',
-    chip: 'bg-deep/10 group-hover:bg-deep/20',
-    tint: 'text-deep',
   },
 ]
 

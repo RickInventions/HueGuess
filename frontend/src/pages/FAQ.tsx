@@ -21,6 +21,13 @@ import {
   Sliders,
   LogOut,
   Clock,
+  Shuffle,
+  Skull,
+  Swords,
+  Smile,
+  Mic,
+  UserX,
+  Sparkles,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { RANK_LADDER, STARTING_RATING, getRankDivision } from '../lib/ranks'
@@ -272,13 +279,55 @@ const faqCategories: FAQCategory[] = [
       {
         question: 'How does Challenge Mode work?',
         answer:
-          'Create a room and share the 8-character code, or invite a friend straight from the friends panel. The host sets difficulty, memorize time (0.5–7s), round time (10–40s), room size (2–8 players) and how many rounds to play. Everyone readies up, a 3-2-1 countdown runs, and the best average accuracy across the rounds wins.',
+          'Create a room and share the 8-character code, or invite a friend straight from the friends panel. The host sets the scoring, difficulty, memorize time (0.5–7s), round time (10–40s), room size (2–8 players) and how many rounds to play. Everyone readies up, a 3-2-1 countdown runs, and the room plays the same colour at the same time.',
         icon: <Users className="w-4 h-4" />,
+      },
+      {
+        question: 'What is the difference between point mode and percentage mode?',
+        answer:
+          'Both live inside Challenge — the host picks one when creating the room, and it is the first setting on the form. Percentage mode is the original: you are ranked on your average accuracy across every round, and it is the mode Elimination is available in. Point mode scores it like a match instead — the closest guess each round takes one point, and the most points wins, so a result reads 3–1. If two players tie for closest they both take a point, and a round where nobody guesses awards none.',
+        icon: <Swords className="w-4 h-4" />,
+      },
+      {
+        question: 'What is Slider Shuffle?',
+        answer:
+          'A room setting. Off, the sliders start at 0 / 0 / 0 every round. On, they start somewhere random — the same starting colour for everyone in the room, picked by the server, and never close enough to the target to be a free score. It takes away the muscle memory of dragging from the same corner every single round.',
+        icon: <Shuffle className="w-4 h-4" />,
+      },
+      {
+        question: 'How does Elimination work?',
+        answer:
+          'The host turns it on and picks a cadence: every 1 to 5 rounds, the player at the bottom goes out. Bottom means overall standing, not that one round, so a single unlucky round cannot knock out the player who has led all game. You do not set a round count with Elimination on; it is worked out for you as (players − 1) × cadence, so the game ends as the last elimination lands. It is a percentage-mode rule — point mode scores in whole points, so early on most of the room is tied and there is no clear last place to knock out.',
+        icon: <Skull className="w-4 h-4" />,
+      },
+      {
+        question: 'What happens when I am eliminated?',
+        answer:
+          'You keep your seat as a spectator. You can watch every round, chat, send voice notes and react to results — you just do not get sliders. Eliminated players drop to the bottom of the leaderboard with no score, since they are no longer placed, and are ordered by how long they lasted. Your card in the room shows an Out badge.',
+        icon: <Sliders className="w-4 h-4" />,
+      },
+      {
+        question: 'Can I react to someone\'s result?',
+        answer:
+          'Yes. Every result row has a reaction bar with seven emoji. One reaction per player per result: tapping a different emoji moves yours across, tapping the same one again clears it. Counts add up across the room, and your own pick is outlined so you can tell it apart. Reactions belong to the round they were left on and clear when the next one starts.',
+        icon: <Smile className="w-4 h-4" />,
+      },
+      {
+        question: 'Can I send a voice message?',
+        answer:
+          'Yes, in the room chat. Hold the mic button to record and let go to send — up to 10 seconds a note, 8 notes a minute. Voice notes are off during a live round on purpose: describing the colour out loud while someone else is still reconstructing it would be coaching. The waiting room, the countdown, between rounds and the final results page are all open.',
+        icon: <Mic className="w-4 h-4" />,
+      },
+      {
+        question: 'Can the host remove someone?',
+        answer:
+          'Yes, in the waiting room and on the final results screen — the host gets a remove icon in the corner of every other player\'s card, behind a confirmation. Nobody can be removed mid-round, since that would unwind a live round\'s scores. A removed player can rejoin with the code unless the room has closed.',
+        icon: <UserX className="w-4 h-4" />,
       },
       {
         question: 'Does Challenge Mode affect my rank?',
         answer:
-          'No. Challenge Mode is completely separate from competitive — no HuePoints are gained or lost, and your streak is untouched. It only counts toward the multiplayer achievements.',
+          'No. Challenge Mode is completely separate from competitive — no HuePoints are gained or lost, and your streak is untouched. It does not count toward achievements either: rooms only exist while someone is in them, so there is no record left afterwards to award from.',
         icon: <Shield className="w-4 h-4" />,
       },
       {
@@ -290,7 +339,7 @@ const faqCategories: FAQCategory[] = [
       {
         question: 'Where is the leave button?',
         answer:
-          'It is the exit icon in the top-right corner of the room, and it always asks for confirmation first. It used to sit under the Ready and Submit buttons, which made it far too easy to hit by accident on a phone.',
+          'It is the exit icon in the top-right corner of the room, and it always asks for confirmation first. It used to sit under the Ready and Submit buttons, which made it far too easy to hit by accident on a phone. The friends panel is the opposite corner, on the left beside the back link.',
         icon: <LogOut className="w-4 h-4" />,
       },
       {
@@ -316,8 +365,14 @@ const faqCategories: FAQCategory[] = [
       {
         question: 'How do I add someone as a friend?',
         answer:
-          'Open the friends panel from the icon in the top bar, search for their username and send a request. You can also add someone from their profile page, or straight from their card in a room\'s waiting list. They have to accept before you are friends.',
+          'Open the friends panel from the address-book icon in the top bar, search for their username and send a request. You can also add someone from their profile page, or straight from the person-plus icon on their card in a room\'s waiting list. They have to accept before you are friends.',
         icon: <UserPlus className="w-4 h-4" />,
+      },
+      {
+        question: 'The friends panel and the add-friend button look different — why?',
+        answer:
+          'Because they do different things and used to sit almost on top of each other. The address-book icon on the left of the top bar opens your own friends list; the person-plus icon in the corner of a player\'s card sends a request to that one person. They were the same icon a few pixels apart, which is why the panel now lives on the left, next to the back link, with a label beside it.',
+        icon: <Users className="w-4 h-4" />,
       },
       {
         question: 'How do I know I have a friend request?',
@@ -334,7 +389,7 @@ const faqCategories: FAQCategory[] = [
       {
         question: 'Why can I not invite a friend?',
         answer:
-          'Invites are delivered live, so a friend has to be online to receive one. Offline friends show a grey dot and the Invite button stays disabled. The button is also hidden when you are not currently in a room, or when the room is already full.',
+          'Four reasons, and the panel says which. Invites are delivered live, so an offline friend shows a grey dot and cannot be reached. A friend already playing shows In a game and cannot be pulled out of it — someone in a waiting room or on a results screen shows In a room and can still be invited. The button is hidden entirely when you are not in a room, or when the room is full. And after you invite someone, that one button goes quiet for a minute so a friend cannot be buried under repeat invites; it comes back on its own, without a reload.',
         icon: <Shield className="w-4 h-4" />,
       },
       {
@@ -406,19 +461,37 @@ const faqCategories: FAQCategory[] = [
       {
         question: 'How many achievements are there?',
         answer:
-          '17, across six categories: Accuracy (90%, 95%, 99%), Streaks (3, 5, 10), Games Played (10, 50, 100), Ranks (Silver, Gold, Platinum, Diamond), Modes (first Hard, first Extreme, 10 Hard) and Multiplayer (first win, 10 games).',
+          '100, across nine categories: Accuracy, Volume, Streaks, Rank, Difficulty, Speed, Daily, Social and Meta. Use the tabs and the search box on the Achievements page rather than scrolling — a flat list of 100 is mostly locked cards.',
         icon: <Award className="w-4 h-4" />,
+      },
+      {
+        question: 'What are the Bronze, Silver, Gold and Platinum tiers?',
+        answer:
+          'How hard the achievement is, and what it is worth: Bronze 10 points, Silver 25, Gold 50, Platinum 100. Your total is the sum of everything you have unlocked, shown at the top of the Achievements page against the maximum available.',
+        icon: <Medal className="w-4 h-4" />,
+      },
+      {
+        question: 'How do I know when I unlock one?',
+        answer:
+          'A card appears over the result screen the moment it happens, listing everything that round earned, with a chime. They also stay on the result card as chips. Anything you have not looked at yet is floated to the top of the Achievements page with an orange New badge, which clears once you have opened the page.',
+        icon: <Sparkles className="w-4 h-4" />,
+      },
+      {
+        question: 'Which modes can unlock achievements?',
+        answer:
+          'Competitive rounds and the Daily Challenge — 14 of them are daily-specific, for playing, streaks, accuracy and speed on the daily colour. Challenge rooms unlock nothing, because a room only exists while people are in it and leaves no record to award from.',
+        icon: <Target className="w-4 h-4" />,
       },
       {
         question: 'Can I see my progress toward one?',
         answer:
-          'Yes. The Achievements section on your profile lists locked achievements with how far along you are, next to the ones you have already earned.',
-        icon: <Target className="w-4 h-4" />,
+          'Yes. Locked cards carry a progress bar and a running count toward the target, so you can see how close you are. Filter to Locked to see only what is left.',
+        icon: <TrendingUp className="w-4 h-4" />,
       },
       {
         question: 'Do achievements give rewards?',
         answer:
-          'They are for bragging rights. Unlocked achievements are shown on your public profile for anyone who looks you up.',
+          'They are for bragging rights. Unlocked achievements are shown on your public profile for anyone who looks you up, and you can pin up to 3 favourites to the top of it from the Achievements page.',
         icon: <Medal className="w-4 h-4" />,
       },
     ],
@@ -465,7 +538,7 @@ export default function FAQ() {
           <h1 className="font-heading text-3xl sm:text-4xl md:text-5xl font-bold text-deep mb-3">
             Frequently asked questions
           </h1>
-          <p className="text-muted text-sm sm:  max-w-xl mx-auto">
+          <p className="text-muted text-sm sm:text-[15px] max-w-xl mx-auto">
             How scoring, ranks, rooms and friends actually work. Still stuck?{' '}
             <Link to="/support" className="text-primary font-medium hover:underline">
               Contact support
@@ -488,8 +561,8 @@ export default function FAQ() {
             onChange={event => setSearch(event.target.value)}
             placeholder="Search the FAQ…"
             aria-label="Search the FAQ"
-            /*   on mobile: anything smaller makes iOS Safari zoom on focus. */
-            className="w-full rounded-button border border-border bg-surface py-3 pl-11 pr-11   sm:text-sm text-deep shadow-card placeholder:text-muted focus:border-primary/40 focus:outline-none focus:shadow-glow-primary"
+            /* 16px on mobile: anything smaller makes iOS Safari zoom on focus. */
+            className="w-full rounded-button border border-border bg-surface py-3 pl-11 pr-11 text-[16px] sm:text-sm text-deep shadow-card placeholder:text-muted focus:border-primary/40 focus:outline-none focus:shadow-glow-primary"
           />
           {search && (
             <button
@@ -521,7 +594,7 @@ export default function FAQ() {
                   <span className="[&>svg]:h-3.5 [&>svg]:w-3.5">{category.icon}</span>
                   {category.name}
                 </div>
-                <h3 className="font-heading   font-semibold text-black">{item.question}</h3>
+                <h3 className="font-heading text-[15px] font-semibold text-black">{item.question}</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-muted">{item.answer}</p>
                 {item.extra}
               </div>
@@ -570,7 +643,7 @@ export default function FAQ() {
                         {category.icon}
                       </div>
                       <div className="min-w-0">
-                        <h2 className="font-heading   sm:text-lg font-semibold text-deep">
+                        <h2 className="font-heading text-[15px] sm:text-lg font-semibold text-deep">
                           {category.name}
                         </h2>
                         <p className="truncate text-xs text-muted">

@@ -85,13 +85,7 @@ function App() {
             path="/challenge"
             element={isAuthenticated && isVerified ? <Challenge /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />}
           />
-          {/* Same lobby, different scoring — `mode` only seeds a room created here.
-              Both land on /room/:code, which reads the mode off the room itself. */}
           <Route
-            path="/duel"
-            element={isAuthenticated && isVerified ? <Challenge mode="duel" /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />}
-          />
-          <Route 
             path="/room/:code" 
             element={isAuthenticated && isVerified ? <Room /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />} 
           />

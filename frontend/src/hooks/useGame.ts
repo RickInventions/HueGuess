@@ -184,9 +184,8 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
         soundService.playSubmitDing();
       }
 
-      if (data.newlyUnlocked && data.newlyUnlocked.length > 0) {
-        soundService.playAchievementUnlock();
-      }
+      // The unlock chime belongs to the modal that announces them, so it fires
+      // once with the celebration rather than on top of the submit ding.
 
       onGameComplete?.(data.result, data.huePoints, data.newlyUnlocked);
 

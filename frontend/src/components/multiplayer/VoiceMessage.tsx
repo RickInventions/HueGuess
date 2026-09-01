@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Pause, Play } from 'lucide-react'
+import { Pause, Play, RotateCcw } from 'lucide-react'
 
 /**
  * Playback for one voice note.
@@ -46,9 +46,9 @@ export function VoiceMessage({ url, durationMs, isYou = false }: VoiceMessagePro
     let audio = audioRef.current
     if (!audio) {
       audio = new Audio(url)
-      // Cloudinary serves these from its own host; without this the element is
-      // fine but `currentTime` progress can be blocked by the opaque response.
-      audio.crossOrigin = 'anonymous'
+      // Deliberately no crossOrigin: nothing here decodes samples or draws a
+      // waveform, so the element does not need a CORS-clean response. Asking for
+      // one only added a way for playback to fail.
       audio.preload = 'metadata'
       audio.addEventListener('timeupdate', () => setPosition(audio!.currentTime * 1000))
       audio.addEventListener('ended', () => {
@@ -56,9 +56,14 @@ export function VoiceMessage({ url, durationMs, isYou = false }: VoiceMessagePro
         setPosition(0)
         if (nowPlaying === audio) nowPlaying = null
       })
+      // The only signal that actually means "this file will not play". Drop the
+      // element with it, so the next tap builds a fresh one and genuinely retries
+      // rather than re-failing on a poisoned instance.
       audio.addEventListener('error', () => {
         setFailed(true)
         setPlaying(false)
+        if (nowPlaying === audio) nowPlaying = null
+        if (audioRef.current === audio) audioRef.current = null
       })
       audioRef.current = audio
     }
@@ -72,9 +77,14 @@ export function VoiceMessage({ url, durationMs, isYou = false }: VoiceMessagePro
 
     if (nowPlaying && nowPlaying !== audio) nowPlaying.pause()
     nowPlaying = audio
+    setFailed(false)
     audio.play().then(
       () => setPlaying(true),
-      () => setFailed(true)
+      // A rejected play() is nearly always the browser cancelling one call with
+      // the next — a double tap, or a pause landing on top of it. Treating that
+      // as a broken file left playable notes reading "Audio unavailable" for the
+      // rest of the session; the 'error' listener above is what decides that.
+      () => setPlaying(false)
     )
   }
 
@@ -88,17 +98,28 @@ export function VoiceMessage({ url, durationMs, isYou = false }: VoiceMessagePro
       <button
         type="button"
         onClick={toggle}
-        disabled={failed}
-        aria-label={playing ? 'Pause voice message' : 'Play voice message'}
+        aria-label={playing ? 'Pause voice message' : failed ? 'Retry voice message' : 'Play voice message'}
         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors ${
-          isYou ? 'bg-primary text-white' : 'bg-primary/15 text-primary hover:bg-primary/25'
-        } disabled:bg-surface-muted disabled:text-muted cursor-pointer disabled:cursor-not-allowed`}
+          failed
+            ? 'bg-surface-muted text-deep hover:bg-surface-alt'
+            : isYou
+              ? 'bg-primary text-white'
+              : 'bg-primary/15 text-primary hover:bg-primary/25'
+        } cursor-pointer`}
       >
-        {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+        {failed ? (
+          <RotateCcw className="h-3 w-3" />
+        ) : playing ? (
+          <Pause className="h-3 w-3" />
+        ) : (
+          <Play className="h-3 w-3" />
+        )}
       </button>
 
       {failed ? (
-        <span className="text-[10px] text-muted">Audio unavailable</span>
+        // Kept tappable rather than disabled: the usual cause is one bad fetch,
+        // and a second attempt normally works.
+        <span className="text-[10px] text-muted">Tap to retry</span>
       ) : (
         <>
           {/* A bar rather than a waveform: a real waveform means decoding the

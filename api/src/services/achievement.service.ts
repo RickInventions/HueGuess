@@ -460,6 +460,24 @@ export class AchievementService {
   }
 
   /**
+   * Which achievements the player has unlocked but never looked at.
+   *
+   * The count alone can only drive a badge; the keys let the achievements page
+   * float those cards to the top and mark them. The page marks everything seen
+   * as it loads, so this is read once per visit and the highlight lasts exactly
+   * that visit — which is the point, otherwise nothing would ever stop glowing.
+   */
+  static async getUnseenKeys(userId: string): Promise<string[]> {
+    const result = await pool.query(
+      `SELECT achievement_key FROM user_achievements
+       WHERE user_id = $1 AND (is_seen IS NULL OR is_seen = false)`,
+      [userId]
+    );
+
+    return result.rows.map(row => row.achievement_key as string);
+  }
+
+  /**
    * The up-to-three achievements a player has pinned to their profile.
    *
    * Filtered against what they have actually unlocked on read as well as on

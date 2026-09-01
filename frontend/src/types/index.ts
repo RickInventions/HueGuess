@@ -196,4 +196,6 @@ export interface DailySubmissionResult {
   previousBest?: number;
   rank: number;
   totalParticipants: number;
+  /** Anything this submission earned — the daily is achievement-bearing. */
+  newlyUnlocked?: Achievement[];
 }

@@ -14,29 +14,19 @@ import { RoomTopBar } from '../components/multiplayer/RoomTopBar'
 import { FriendsLauncher } from '../components/multiplayer/FriendsModal'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
-import type { RoomConfig, RoomMode } from '../types/multiplayer'
+import type { RoomConfig } from '../types/multiplayer'
 import { RoomSettings } from '../components/multiplayer/RoomSettings'
 
 type View = 'choose' | 'create' | 'join' | 'waiting'
 
-/** Lobby copy per mode. The room's own config is what actually scores it. */
-const MODE_COPY: Record<RoomMode, { title: string; blurb: string }> = {
-  challenge: {
-    title: 'Challenge',
-    blurb: 'Play against friends in real time',
-  },
-  duel: {
-    title: 'Duel',
-    blurb: 'A point a round to the closest guess — most points takes it',
-  },
-}
-
 /**
- * Lobby for both multiplayer modes. `mode` only seeds a room you create here:
- * joining reads the mode off the room, so a Challenge code pasted into the Duel
- * lobby correctly joins a Challenge room.
+ * The Challenge lobby.
+ *
+ * One lobby for both ways of scoring: point mode and percentage mode are a
+ * setting on the room you create, not a separate mode with its own entry, so a
+ * code always joins the room it belongs to whatever it is scored on.
  */
-export default function Challenge({ mode = 'challenge' }: { mode?: RoomMode }) {
+export default function Challenge() {
   const navigate = useNavigate()
   const location = useLocation()
   const { user } = useAuth()
@@ -226,7 +216,7 @@ export default function Challenge({ mode = 'challenge' }: { mode?: RoomMode }) {
       ) : (
         <div className="flex items-center justify-between gap-3">
           {backLink}
-          <FriendsLauncher />
+          <FriendsLauncher showLabel />
         </div>
       )}
 
@@ -255,8 +245,10 @@ export default function Challenge({ mode = 'challenge' }: { mode?: RoomMode }) {
 
       {view === 'choose' && (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          <h2 className="font-heading text-section text-center">{MODE_COPY[mode].title}</h2>
-          <p className="text-center text-sm text-muted">{MODE_COPY[mode].blurb}</p>
+          <h2 className="font-heading text-section text-center">Challenge</h2>
+          <p className="text-center text-sm text-muted">
+            Play against friends in real time — pick point or percentage scoring when you create a room
+          </p>
           <Button fullWidth onClick={() => setView('create')} disabled={!canAct}>
             Create Room
           </Button>
@@ -272,7 +264,7 @@ export default function Challenge({ mode = 'challenge' }: { mode?: RoomMode }) {
       )}
 
       {view === 'create' && (
-        <RoomSetup onCreate={handleCreate} mode={mode} loading={isCreating} disabled={!canAct} />
+        <RoomSetup onCreate={handleCreate} loading={isCreating} disabled={!canAct} />
       )}
 
       {view === 'join' && <JoinForm onJoin={handleJoin} loading={isJoining} disabled={!canAct} />}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { CornerUpLeft, MessageCircle, SendHorizontal, X } from 'lucide-react'
+import { toast } from 'sonner'
 import type { ChatMessage, ChatReplyTo, GamePhase } from '../../types/multiplayer'
 import { voice as voiceApi } from '../../lib/api'
 import { Card } from '../ui/Card'
@@ -141,10 +142,21 @@ export function ChatPanel({
   // itself, so it arrives back over the socket like any other. That keeps one
   // source of truth for chat history instead of an optimistic copy that has to be
   // reconciled with the real one.
+  //
+  // The catch matters as much as the send. A failed upload used to be almost
+  // invisible — a 10px label beside the mic — so the sender let go, saw nothing
+  // appear, and had no reason to think the room had not heard them. The rethrow
+  // keeps the recorder's own error state working.
   const sendVoice = useCallback(
     async (blob: Blob, durationMs: number) => {
       if (!roomCode) return
-      await voiceApi.send(blob, roomCode, durationMs)
+      try {
+        await voiceApi.send(blob, roomCode, durationMs)
+      } catch (error) {
+        const reason = (error as { response?: { data?: { error?: string } } }).response?.data?.error
+        toast.error(reason || 'That voice message did not send — try again')
+        throw error
+      }
     },
     [roomCode]
   )
@@ -295,8 +307,6 @@ export function ChatPanel({
           maxLength={200}
           aria-label="Chat message"
           disabled={!canSend}
-          //   below sm stops iOS Safari zooming the page on focus, which
-          // it does to any field under 16px.
           className="flex-1 min-w-0 px-3 py-2 rounded-button bg-surface-alt border border-border sm:text-sm focus:outline-none focus:shadow-glow-primary disabled:opacity-50"
         />
         {canRecord && <VoiceRecorder onRecorded={sendVoice} disabled={!canSend} />}

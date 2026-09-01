@@ -25,6 +25,19 @@ export const DISCONNECT_WARNING_MS = 20_000;
 export const RESULTS_DURATION_MS = 6_000;
 export const COUNTDOWN_SECONDS = 3;
 
+/**
+ * Everything the standing order is decided on, structurally satisfied by both a
+ * live Player (via `standingOf`) and a LeaderboardEntryDTO.
+ */
+interface Standing {
+  points: number;
+  averageAccuracy: number;
+  eliminated: boolean;
+  eliminatedRound?: number;
+  /** Absent on the DTO — only the live comparison uses it as a last resort. */
+  currentAccuracy?: number;
+}
+
 class RoomManager {
   private rooms: Map<string, Room> = new Map();
   private playerToRoom: Map<string, string> = new Map(); // socketId -> roomCode
@@ -428,6 +441,7 @@ class RoomManager {
       player.currentAccuracy = undefined;
       player.points = 0;
       player.eliminated = false;
+      player.eliminatedRound = undefined;
     }
 
     return room;
@@ -634,8 +648,11 @@ class RoomManager {
   /**
    * Elimination: every `elimEveryRounds` rounds, the weakest player drops out.
    *
-   * Exactly one player per cycle, never a tie that empties the room — a tie on
-   * the round is broken by the lower running average, then by join order.
+   * Weakest means last in the *overall* standing, not lowest on the round just
+   * played. Ranking on the single round knocked out whoever had one unlucky
+   * guess, even a player leading the room by a mile — which is the opposite of
+   * what an elimination round is meant to settle. The round only breaks a dead
+   * heat, and join order breaks that.
    */
   private applyElimination(room: Room): { userId: string; username: string } | undefined {
     const every = Math.max(1, room.config.elimEveryRounds);
@@ -645,16 +662,48 @@ class RoomManager {
     // Below two there is nothing left to decide.
     if (active.length < 2) return undefined;
 
-    const average = (p: Player) => (p.roundsPlayed > 0 ? p.totalAccuracy / p.roundsPlayed : 0);
-    const weakest = active.reduce((lowest, player) => {
-      const byRound = (player.currentAccuracy ?? 0) - (lowest.currentAccuracy ?? 0);
-      if (byRound !== 0) return byRound < 0 ? player : lowest;
-      return average(player) < average(lowest) ? player : lowest;
-    });
+    // Bottom of the same order the leaderboard is drawn in, so the player who
+    // goes out is always visibly the one in last place.
+    const weakest = active.reduce((lowest, player) =>
+      this.compareStanding(room, this.standingOf(player), this.standingOf(lowest)) > 0
+        ? player
+        : lowest
+    );
 
     weakest.eliminated = true;
+    weakest.eliminatedRound = room.currentRound;
     weakest.status = 'waiting';
     return { userId: weakest.userId, username: weakest.username };
+  }
+
+  /** The handful of fields the standing is decided on, read off a live player. */
+  private standingOf(player: Player): Standing {
+    return {
+      points: player.points,
+      averageAccuracy: player.roundsPlayed > 0 ? player.totalAccuracy / player.roundsPlayed : 0,
+      eliminated: player.eliminated,
+      eliminatedRound: player.eliminatedRound,
+      currentAccuracy: player.currentAccuracy,
+    };
+  }
+
+  /**
+   * Standing order, best first — the single source of truth for who is ahead.
+   *
+   * One comparator for the leaderboard and for the elimination pick, so the two
+   * can never disagree about who is last.
+   */
+  private compareStanding(room: Room, a: Standing, b: Standing): number {
+    // Knocked out means no longer placed: eliminated players sit under everyone
+    // still in, most recently eliminated highest, since surviving longer is the
+    // better finish.
+    if (a.eliminated !== b.eliminated) return a.eliminated ? 1 : -1;
+    if (a.eliminated && b.eliminated) return (b.eliminatedRound ?? 0) - (a.eliminatedRound ?? 0);
+
+    // Points are the standing in duel; the average is only the tiebreak there.
+    if (room.config.mode === 'duel' && a.points !== b.points) return b.points - a.points;
+    if (a.averageAccuracy !== b.averageAccuracy) return b.averageAccuracy - a.averageAccuracy;
+    return (b.currentAccuracy ?? 0) - (a.currentAccuracy ?? 0);
   }
 
   getRoundResults(room: Room): RoundResultDTO[] {
@@ -692,16 +741,11 @@ class RoomManager {
         totalAccuracy: Math.round(player.totalAccuracy * 1000) / 1000,
         points: player.points,
         eliminated: player.eliminated,
+        eliminatedRound: player.eliminatedRound,
       });
     }
 
-    if (room.config.mode === 'duel') {
-      // Points decide a duel; average accuracy only breaks ties between equal
-      // point totals.
-      leaderboard.sort((a, b) => b.points - a.points || b.averageAccuracy - a.averageAccuracy);
-    } else {
-      leaderboard.sort((a, b) => b.averageAccuracy - a.averageAccuracy);
-    }
+    leaderboard.sort((a, b) => this.compareStanding(room, a, b));
     return leaderboard;
   }
 
@@ -798,6 +842,7 @@ class RoomManager {
       player.currentAccuracy = undefined;
       player.points = 0;
       player.eliminated = false;
+      player.eliminatedRound = undefined;
     }
 
     return room;

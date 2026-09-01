@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
+  BookUser,
   Check,
   Clock,
   Loader2,
@@ -59,7 +60,7 @@ function Row({
     <motion.li
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex items-center gap-3 rounded-card border border-border bg-surface-alt/60 px-3 py-2.5"
+      className="flex items-center gap-2 rounded-card border border-border bg-surface-alt/60 px-2.5 py-2 sm:gap-3 sm:px-3 sm:py-2.5"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -72,17 +73,19 @@ function Row({
           )}
           <span className="truncate text-sm font-medium text-deep">{username}</span>
         </div>
-        <div className="mt-0.5 flex items-center gap-2">
+        {/* Wraps rather than overflowing: a long rank name plus a rating plus
+            "In a game" does not fit one line on a 320px phone. */}
+        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
           <RankBadge rankTier={rankTier} rating={rating} />
           {note && <span className="text-[11px] text-muted">{note}</span>}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">{actions}</div>
+      <div className="flex shrink-0 items-center gap-0.5 sm:gap-1.5">{actions}</div>
     </motion.li>
   )
 }
 
-/** Small square icon button — the row actions are tight on a phone. */
+/** Small square icon button — 40px on a phone, tighter once there's room. */
 function IconAction({
   onClick,
   label,
@@ -110,7 +113,7 @@ function IconAction({
       disabled={disabled}
       aria-label={label}
       title={label}
-      className={`rounded-button p-2 transition-colors disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer ${tones[tone]}`}
+      className={`rounded-button p-3 transition-colors disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer sm:p-2 ${tones[tone]}`}
     >
       {children}
     </button>
@@ -437,8 +440,9 @@ export function FriendsModal({ open, onClose, inRoom = false, initialTab = 'frie
                 onChange={event => setQuery(event.target.value)}
                 placeholder="Search by username"
                 autoComplete="off"
-                // 16px minimum: anything smaller makes iOS Safari zoom the page on focus.
-                className="w-full rounded-button border border-border bg-surface-alt py-2.5 pl-9 pr-9 text-base sm:text-sm text-deep placeholder:text-muted focus:border-primary/40 focus:outline-none"
+                // 16px on a phone: anything smaller makes iOS Safari zoom the
+                // page on focus, and it does not zoom back out afterwards.
+                className="w-full rounded-button border border-border bg-surface-alt py-2.5 pl-9 pr-9 text-[16px] text-deep placeholder:text-muted focus:border-primary/40 focus:outline-none sm:text-sm"
               />
               {searching && (
                 <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-primary" />
@@ -533,13 +537,21 @@ export function FriendsModal({ open, onClose, inRoom = false, initialTab = 'frie
 /**
  * Icon button that opens the modal, badged with the number of requests waiting
  * on you. Owns its own open state so every entry point is one line.
+ *
+ * `BookUser` rather than `UserPlus`: the add-friend button on a player card is a
+ * `UserPlus`, and two identical icons a few pixels apart in the same room view
+ * read as the same control. This one opens your friends list; that one sends a
+ * request to one specific player.
  */
 export function FriendsLauncher({
   inRoom = false,
   className = '',
+  /** Show the word "Friends" from sm up. Off in tight icon-only rows. */
+  showLabel = false,
 }: {
   inRoom?: boolean
   className?: string
+  showLabel?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const { pendingCount } = useFriends()
@@ -556,9 +568,10 @@ export function FriendsLauncher({
         onClick={() => setOpen(true)}
         aria-label={label}
         title={label}
-        className={`relative rounded-button p-2 text-muted transition-colors hover:bg-primary/10 hover:text-primary cursor-pointer ${className}`}
+        className={`relative inline-flex items-center gap-1.5 rounded-button p-2 text-muted transition-colors hover:bg-primary/10 hover:text-primary cursor-pointer ${className}`}
       >
-        <UserPlus className="h-4 w-4" />
+        <BookUser className="h-4 w-4" />
+        {showLabel && <span className="hidden text-xs font-medium sm:inline">Friends</span>}
         {pendingCount > 0 && (
           <span className="absolute -right-0.5 -top-0.5 h-4 min-w-4 rounded-full bg-accent px-1 text-center font-mono text-[10px] leading-4 text-white">
             {pendingCount > 9 ? '9+' : pendingCount}

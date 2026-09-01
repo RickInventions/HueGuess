@@ -104,11 +104,14 @@ const MAX_SHOWCASE = 3
 function AchievementCard({
   ach,
   isUnlocked,
+  isNew,
   pinned,
   onTogglePin,
 }: {
   ach: Achievement
   isUnlocked: boolean
+  /** Unlocked since the last visit to this page — gets its own colour and a badge. */
+  isNew?: boolean
   pinned: boolean
   onTogglePin?: () => void
 }) {
@@ -119,7 +122,13 @@ function AchievementCard({
   return (
     <Card
       className={`p-4 border-l-4 ${
-        isUnlocked ? `${tier.border} ${tier.bg}` : 'border-l-border'
+        isNew
+          ? // Accent, not the tier colour: "new" has to be spottable while scanning
+            // a grid where every card is already tinted by its tier.
+            'border-l-accent bg-accent/10 ring-2 ring-accent/50'
+          : isUnlocked
+            ? `${tier.border} ${tier.bg}`
+            : 'border-l-border'
       }`}
     >
       <div className="flex items-start gap-3">
@@ -156,7 +165,12 @@ function AchievementCard({
 
           <p className="mt-0.5 text-xs text-muted">{ach.description}</p>
 
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {isNew && (
+              <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                New
+              </span>
+            )}
             <span
               className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${tier.bg} ${tier.text}`}
             >
@@ -192,6 +206,14 @@ export default function Achievements() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [showcase, setShowcase] = useState<string[]>([])
   const [showcaseError, setShowcaseError] = useState<string | null>(null)
+  /**
+   * Unlocked but never looked at, snapshotted on load.
+   *
+   * Held in local state on purpose: the load also marks everything seen, so this
+   * is the only copy of that list for the rest of the visit. Come back later and
+   * the highlight is gone, which is what "new" should mean.
+   */
+  const [unseen, setUnseen] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
 
   const [category, setCategory] = useState('all')
@@ -223,6 +245,7 @@ export default function Achievements() {
         setLocked(res.data.locked ?? [])
         setStats(res.data.stats ?? null)
         setShowcase((res.data.showcase ?? []).map((a: Achievement) => a.key))
+        setUnseen(new Set<string>(res.data.unseenKeys ?? []))
         // Opening this page is the acknowledgement — clears the "new" panel on Home.
         // Fire and forget: a failure here must not break the list that just loaded.
         achievementsApi.markAllSeen().catch(() => {})
@@ -238,23 +261,26 @@ export default function Achievements() {
   const unlockedKeys = useMemo(() => new Set(unlocked.map(a => a.key)), [unlocked])
 
   /**
-   * One list, ordered unlocked-first.
+   * One list: new unlocks first, then unlocked, then locked.
    *
-   * The server already returns each group in catalogue order, so concatenating
-   * keeps tiers ascending inside each half without a second sort.
+   * The server already returns each group in catalogue order and `sort` is
+   * stable, so floating the unseen ones to the front leaves every other card
+   * exactly where it was.
    */
   const visible = useMemo(() => {
     const all = [...unlocked, ...locked]
     const needle = query.trim().toLowerCase()
 
-    return all.filter(a => {
+    const filtered = all.filter(a => {
       if (category !== 'all' && a.category !== category) return false
       if (status === 'unlocked' && !unlockedKeys.has(a.key)) return false
       if (status === 'locked' && unlockedKeys.has(a.key)) return false
       if (needle && !`${a.name} ${a.description}`.toLowerCase().includes(needle)) return false
       return true
     })
-  }, [unlocked, locked, category, status, query, unlockedKeys])
+
+    return filtered.sort((a, b) => Number(unseen.has(b.key)) - Number(unseen.has(a.key)))
+  }, [unlocked, locked, category, status, query, unlockedKeys, unseen])
 
   /** Counts per tab, so a tab that would be empty says so before you tap it. */
   const counts = useMemo(() => {
@@ -322,6 +348,22 @@ export default function Achievements() {
         </div>
       ) : (
         <>
+          {unseen.size > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 flex items-center gap-2 rounded-card border-l-4 border-l-accent bg-accent/10 p-3"
+            >
+              <Sparkles className="h-4 w-4 shrink-0 text-accent" />
+              <p className="text-xs text-deep">
+                <span className="font-semibold">
+                  {unseen.size} new {unseen.size === 1 ? 'achievement' : 'achievements'}
+                </span>{' '}
+                since you last looked — listed first
+              </p>
+            </motion.div>
+          )}
+
           {user && (
             <div className="mb-4 flex flex-col gap-2 rounded-card border border-border bg-surface-alt p-3 sm:flex-row sm:items-center">
               <p className="flex items-center gap-1.5 text-xs text-muted">
@@ -347,8 +389,8 @@ export default function Achievements() {
             </div>
           )}
 
-          {/* Controls. The search field is   below sm so iOS Safari does
-              not zoom the page when it gets focus. */}
+          {/* Controls. The search field is 16px on a phone so iOS Safari does not
+              zoom the page when it gets focus. */}
           <div className="mb-4 flex flex-col gap-3">
             <div className="flex flex-col gap-2 sm:flex-row">
               <label className="relative flex-1">
@@ -359,7 +401,7 @@ export default function Achievements() {
                   onChange={e => setQuery(e.target.value)}
                   placeholder="Search achievements…"
                   aria-label="Search achievements"
-                  className="w-full rounded-button border border-border bg-surface py-2 pl-9 pr-3 focus:outline-none focus:shadow-glow-primary sm:text-sm"
+                  className="w-full rounded-button border border-border bg-surface py-2 pl-9 pr-3 text-[16px] focus:outline-none focus:shadow-glow-primary sm:text-sm"
                 />
               </label>
 
@@ -417,6 +459,7 @@ export default function Achievements() {
                     key={ach.key}
                     ach={ach}
                     isUnlocked={isUnlocked}
+                    isNew={unseen.has(ach.key)}
                     pinned={showcase.includes(ach.key)}
                     onTogglePin={user && isUnlocked ? () => togglePin(ach.key) : undefined}
                   />

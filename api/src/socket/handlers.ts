@@ -154,7 +154,16 @@ function parseConfig(input: Partial<RoomConfig> | undefined): RoomConfig {
   // can still open a room instead of failing validation on a field it never sent.
   const mode = (raw.mode ?? 'challenge') as RoomMode;
   const sliderShuffle = raw.sliderShuffle === true;
-  const elimination = raw.elimination === true;
+  /**
+   * Elimination is a percentage-mode rule.
+   *
+   * Point mode scores in whole points, so for the first rounds most of the room
+   * is tied on the same number and the player knocked out would be picked by the
+   * tiebreak rather than by the score everyone can see — the standing on screen
+   * would not be the standing it eliminated on. Forced off here as well as hidden
+   * in the form, so a stale or hand-rolled client can't set both.
+   */
+  const elimination = raw.elimination === true && mode !== 'duel';
   const elimEveryRounds = Math.round(Number(raw.elimEveryRounds ?? 2));
 
   if (!Number.isFinite(roundTimeSeconds) || roundTimeSeconds < 10 || roundTimeSeconds > 40) {

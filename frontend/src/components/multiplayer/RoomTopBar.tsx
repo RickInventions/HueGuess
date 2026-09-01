@@ -42,7 +42,13 @@ export function RoomTopBar({
   return (
     <>
       <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0 flex-1">{children}</div>
+        {/* Friends sits on the left, beside the back link. It used to sit up in
+            the right-hand cluster, directly above the add-friend buttons in the
+            corner of each player card — same icon, near enough the same place. */}
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <div className="min-w-0">{children}</div>
+          <FriendsLauncher inRoom={inRoom} showLabel />
+        </div>
 
         <div className="flex shrink-0 items-center gap-1">
           {playerCount !== undefined && maxPlayers !== undefined && (
@@ -51,8 +57,6 @@ export function RoomTopBar({
               {playerCount}/{maxPlayers}
             </span>
           )}
-
-          <FriendsLauncher inRoom={inRoom} />
 
           <button
             type="button"

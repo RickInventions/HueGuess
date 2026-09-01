@@ -43,6 +43,10 @@ interface PlayerListProps {
  * Corner button that reflects how you already relate to this player: add when
  * they're a stranger, waiting when a request is out, accept when they asked
  * first, nothing at all once you're friends.
+ *
+ * Keeps `UserPlus`, which is what "add this person" means everywhere else; the
+ * page-level friends launcher uses `BookUser` so the two can't be mistaken for
+ * each other. The chip background ties it to the card it acts on.
  */
 function FriendButton({ userId, username }: { userId: string; username: string }) {
   const { relationshipFor, sendRequest, acceptRequest } = useFriends()
@@ -78,7 +82,7 @@ function FriendButton({ userId, username }: { userId: string; username: string }
       disabled={!config.action}
       aria-label={config.label}
       title={config.label}
-      className={`absolute top-1.5 right-1.5 rounded-full p-1.5 transition-colors disabled:cursor-default ${config.tone} ${
+      className={`absolute top-1.5 right-1.5 rounded-full bg-surface-alt/90 p-1.5 transition-colors disabled:cursor-default ${config.tone} ${
         config.action ? 'cursor-pointer' : ''
       }`}
     >

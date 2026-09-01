@@ -32,6 +32,11 @@ export interface Player {
    * phase change and on disconnect/reconnect, all of which would erase it.
    */
   eliminated: boolean;
+  /**
+   * The round they went out on. Doubles as their finishing place: the last
+   * player knocked out placed second, the one before them third, and so on.
+   */
+  eliminatedRound?: number;
   disconnectedAt?: Date;
 }
 
@@ -158,6 +163,8 @@ export interface LeaderboardEntryDTO {
   totalAccuracy: number;
   points: number;
   eliminated: boolean;
+  /** Set only for eliminated players — the round they went out on. */
+  eliminatedRound?: number;
 }
 
 /**

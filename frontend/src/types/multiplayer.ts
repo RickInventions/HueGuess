@@ -71,6 +71,8 @@ export interface LeaderboardEntry {
   /** Duel mode: rounds won. Ordering key in duel, decoration elsewhere. */
   points: number;
   eliminated: boolean;
+  /** Eliminated players only — the round they went out on, which is their place. */
+  eliminatedRound?: number;
   /** Set locally from `play_again_update`, not sent by the server. */
   playedAgain?: boolean;
 }

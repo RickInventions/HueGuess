@@ -9,6 +9,7 @@ import { ColorDisplay } from '../components/game/ColorDisplay'
 import { ColorSliders } from '../components/game/ColorSliders'
 import { TimerBar } from '../components/game/TimerBar'
 import { ResultCard } from '../components/game/ResultCard'
+import { AchievementUnlockModal } from '../components/game/AchievementUnlockModal'
 import { DifficultySelect } from '../components/game/DifficultySelect'
 import { soundService } from '../services/soundService'
 import type { Difficulty } from '../types'
@@ -42,16 +43,7 @@ export default function Game() {
     submitGuess,
     submitTimeout,
     resetGame,
-  } = useGame({
-    mode,
-    onGameComplete: (_res, _huePoints, achievements) => {
-      if (achievements?.length) {
-        achievements.forEach(() => {
-          soundService.playAchievementUnlock()
-        })
-      }
-    },
-  })
+  } = useGame({ mode })
 
   // Keep latest values in refs so timer callbacks don't go stale
   const phaseRef = useRef(phase)
@@ -301,6 +293,10 @@ export default function Game() {
               {/* Result Phase */}
               {phase === 'result' && result && (
                 <div className="space-y-4 sm:space-y-6">
+                  {/* Over the result, not instead of it — the chips inside
+                      ResultCard stay as the permanent record. */}
+                  <AchievementUnlockModal achievements={newlyUnlocked} />
+
                   <ResultCard
                     result={result}
                     difficulty={selectedDifficulty || undefined}

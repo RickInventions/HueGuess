@@ -65,13 +65,26 @@ export class VoiceService {
           resource_type: 'video',
           folder: `hueguess/voice/${roomCode}`,
           tags: [TAG, roomTag(roomCode)],
+          // Transcode to mp3 before the URL is handed out, and wait for it.
+          //
+          // What arrives here is whatever the *sender's* browser can record:
+          // Chrome and Firefox produce WebM/Opus, which Safari and every browser
+          // on iOS refuse to decode. Serving the original meant a note played
+          // fine for half the room and read "Audio unavailable" for the rest —
+          // mp3 plays everywhere, and a ten-second clip converts in well under
+          // the time the upload itself takes.
+          eager: [{ format: 'mp3' }],
+          eager_async: false,
         },
         (error, result) => {
           if (error || !result) {
             reject(error ?? new Error('Upload returned no result'));
             return;
           }
-          resolve({ url: result.secure_url, publicId: result.public_id });
+          // Fall back to the original if the derivation is missing for any
+          // reason: a note most of the room can play beats no note at all.
+          const derived = (result.eager as { secure_url?: string }[] | undefined)?.[0]?.secure_url;
+          resolve({ url: derived ?? result.secure_url, publicId: result.public_id });
         }
       );
 

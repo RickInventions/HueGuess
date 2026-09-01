@@ -9,6 +9,7 @@ import { soundService } from '../services/soundService'
 import { ColorDisplay } from '../components/game/ColorDisplay'
 import { ColorSliders } from '../components/game/ColorSliders'
 import { TimerBar } from '../components/game/TimerBar'
+import { AchievementUnlockModal } from '../components/game/AchievementUnlockModal'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import type { HSLColor, DailyChallenge, DailySubmissionResult } from '../types'
@@ -253,6 +254,9 @@ export default function Daily() {
     const rankBadge = result.rank === 1 ? '🥇' : result.rank === 2 ? '🥈' : result.rank === 3 ? '🥉' : null
     return (
       <div className="max-w-lg mx-auto px-4 py-8 space-y-6">
+        {/* The daily is where most achievements land, so it announces them too. */}
+        <AchievementUnlockModal achievements={result.newlyUnlocked} />
+
         <div className="flex items-center justify-between">
           <button onClick={handleGoHome} className="flex items-center gap-1 text-muted hover:text-deep transition-colors">
             <ArrowLeft className="w-4 h-4" />
