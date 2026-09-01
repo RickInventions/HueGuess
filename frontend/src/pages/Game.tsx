@@ -9,7 +9,7 @@ import { ColorDisplay } from '../components/game/ColorDisplay'
 import { ColorSliders } from '../components/game/ColorSliders'
 import { TimerBar } from '../components/game/TimerBar'
 import { ResultCard } from '../components/game/ResultCard'
-import { AchievementUnlockModal } from '../components/game/AchievementUnlockModal'
+import { AchievementCelebration } from '../components/game/AchievementCelebration'
 import { DifficultySelect } from '../components/game/DifficultySelect'
 import { soundService } from '../services/soundService'
 import type { Difficulty } from '../types'
@@ -293,15 +293,14 @@ export default function Game() {
               {/* Result Phase */}
               {phase === 'result' && result && (
                 <div className="space-y-4 sm:space-y-6">
-                  {/* Over the result, not instead of it — the chips inside
-                      ResultCard stay as the permanent record. */}
-                  <AchievementUnlockModal achievements={newlyUnlocked} />
+                  {/* Above the score, because an unlock is the rarer thing and
+                      it should be the first thing on the page when it happens. */}
+                  <AchievementCelebration achievements={newlyUnlocked} />
 
                   <ResultCard
                     result={result}
                     difficulty={selectedDifficulty || undefined}
                     huePoints={huePointsUpdate}
-                    newlyUnlocked={newlyUnlocked}
                     mode={mode}
                   />
 

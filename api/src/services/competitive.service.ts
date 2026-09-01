@@ -96,7 +96,15 @@ export class CompetitiveService {
     // with `||` — so a streak that had just been broken (0) fell through to the
     // stale stored value and could unlock a streak achievement the player had
     // lost. Nothing is passed now, so nothing can disagree with the stats.
-    const newlyUnlocked = await AchievementService.syncAchievements(userId);
+    //
+    // Swallowed rather than thrown: the round, the rating and the history row are
+    // all committed above, so throwing here would 500 a game that actually
+    // counted. Achievements are recomputed from scratch on every sync, so the
+    // unlock simply surfaces on the next round.
+    const newlyUnlocked = await AchievementService.syncAchievements(userId).catch(error => {
+      console.error('Competitive achievement sync failed:', (error as Error).message);
+      return [];
+    });
 
     return { oldRating, newRating, ratingChange: change, oldStreak: streak, newStreak, rankTier: newTier, newlyUnlocked };
   }

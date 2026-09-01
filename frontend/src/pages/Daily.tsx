@@ -9,7 +9,7 @@ import { soundService } from '../services/soundService'
 import { ColorDisplay } from '../components/game/ColorDisplay'
 import { ColorSliders } from '../components/game/ColorSliders'
 import { TimerBar } from '../components/game/TimerBar'
-import { AchievementUnlockModal } from '../components/game/AchievementUnlockModal'
+import { AchievementCelebration } from '../components/game/AchievementCelebration'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import type { HSLColor, DailyChallenge, DailySubmissionResult } from '../types'
@@ -254,9 +254,6 @@ export default function Daily() {
     const rankBadge = result.rank === 1 ? '🥇' : result.rank === 2 ? '🥈' : result.rank === 3 ? '🥉' : null
     return (
       <div className="max-w-lg mx-auto px-4 py-8 space-y-6">
-        {/* The daily is where most achievements land, so it announces them too. */}
-        <AchievementUnlockModal achievements={result.newlyUnlocked} />
-
         <div className="flex items-center justify-between">
           <button onClick={handleGoHome} className="flex items-center gap-1 text-muted hover:text-deep transition-colors">
             <ArrowLeft className="w-4 h-4" />
@@ -264,6 +261,10 @@ export default function Daily() {
           </button>
           <span className="text-xs font-medium text-primary bg-primary/10 px-3 py-1 rounded-full">Daily Challenge</span>
         </div>
+
+        {/* The daily is where most achievements land, so it announces them too —
+            under the header, above the score, same as the main result page. */}
+        <AchievementCelebration achievements={result.newlyUnlocked} />
         <Card className="text-center space-y-4 p-6">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted">Your Accuracy</span>

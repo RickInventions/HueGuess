@@ -28,6 +28,8 @@ import {
   Mic,
   UserX,
   Sparkles,
+  FlipHorizontal2,
+  EyeOff,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { RANK_LADDER, STARTING_RATING, getRankDivision } from '../lib/ranks'
@@ -189,6 +191,12 @@ const faqCategories: FAQCategory[] = [
           'Yes. Casual mode needs no sign-up at all — pick a difficulty and play. Nothing is saved and it does not touch your rank, so it is the right place to warm up.',
         icon: <User className="w-4 h-4" />,
       },
+      {
+        question: 'What modes are there?',
+        answer:
+          'Six. Daily Challenge is one colour a day for everyone. Casual is unranked practice. Competitive is the HuePoints ladder. Challenge is real-time rooms with friends. Inverted shows you the complement of the colour instead of the colour. Blind either never shows it at all, or takes the colour off your sliders for the rebuild. Inverted and Blind sit off the ladder — they are scored on percentage alone.',
+        icon: <Sparkles className="w-4 h-4" />,
+      },
     ],
   },
   {
@@ -267,6 +275,12 @@ const faqCategories: FAQCategory[] = [
         answer:
           'Immediately. Every ranking is read from live stats when you open the page, so a game you just finished is already counted.',
         icon: <TrendingUp className="w-4 h-4" />,
+      },
+      {
+        question: 'What are the Inverted and Blind boards at the top of the page?',
+        answer:
+          'Four separate boards live behind that row of tabs. Competitive is the HuePoints ladder. Inverted, Blind · no target and Blind · grey sliders are ranked purely on accuracy — your single best round, ties going to whoever got there first — and each of them splits again by difficulty, because an easy 98% and an extreme 98% are not the same achievement. There is no minimum number of rounds on those three: one score puts you on the board.',
+        icon: <FlipHorizontal2 className="w-4 h-4" />,
       },
     ],
   },
@@ -353,6 +367,50 @@ const faqCategories: FAQCategory[] = [
         answer:
           'Host passes to the next connected player and the game carries on. If everyone leaves, the room closes and its code is released.',
         icon: <Users className="w-4 h-4" />,
+      },
+    ],
+  },
+  {
+    id: 'modes',
+    name: 'Inverted & Blind',
+    blurb: 'The two modes off the ladder',
+    icon: <FlipHorizontal2 className="w-5 h-5" />,
+    items: [
+      {
+        question: 'What is Inverted mode?',
+        answer:
+          'You are shown the complement of the target instead of the target itself, and the whole page flips to a dark, inverted palette while you look at it. When the timer runs out the page comes back to normal and you rebuild the original colour — not the one you were shown.',
+        icon: <FlipHorizontal2 className="w-4 h-4" />,
+      },
+      {
+        question: 'How do I work out the original from the complement?',
+        answer:
+          'The complement is the hue 180° around the wheel with the lightness flipped: saturation is untouched, and 100% minus the lightness you saw is the lightness you want. So a colour shown at 40° / 60% / 25% came from 220° / 60% / 75%. It is its own inverse, which means the same move that produced what you saw gets you back to the answer.',
+        icon: <Sliders className="w-4 h-4" />,
+      },
+      {
+        question: 'What are the two Blind sub-modes?',
+        answer:
+          'Blind · no target never shows you a colour at all — the target is generated on the server, you set the sliders on instinct alone, and you find out how close you landed when you submit. Blind · grey sliders does show you the colour first, then strips every trace of colour out of the controls for the rebuild: flat grey tracks, no gradients to aim along and no live preview. They keep separate leaderboards, because they are not the same problem.',
+        icon: <EyeOff className="w-4 h-4" />,
+      },
+      {
+        question: 'Do Inverted and Blind affect my HuePoints or rank?',
+        answer:
+          'No. Neither mode awards HuePoints, moves your rank, counts towards your competitive stats or unlocks achievements. Every round is scored purely as a percentage and the only thing it can change is your position on that mode\'s own board.',
+        icon: <Trophy className="w-4 h-4" />,
+      },
+      {
+        question: 'How does difficulty work in these modes?',
+        answer:
+          'The same four levels as everywhere else, and they matter more here: harder difficulties draw the target from a wider saturation and lightness range, and give you less time. Each difficulty is a separate leaderboard, so you are only ever ranked against people who took on the same conditions. Blind · no target has no memorization phase at all — its clock is the reconstruction timer.',
+        icon: <Zap className="w-4 h-4" />,
+      },
+      {
+        question: 'Can I cheat by reading the colour out of the page?',
+        answer:
+          'Not usefully. In Blind mode the target never reaches your browser — the server issues a signed token that carries it, your guess is posted back with that token, and the scoring happens server-side. A round is also tied to the account it was issued to and expires after 15 minutes.',
+        icon: <Shield className="w-4 h-4" />,
       },
     ],
   },

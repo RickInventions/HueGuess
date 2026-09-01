@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Coffee, Swords, ArrowRight, Trophy, User, Users, Calendar,
-  Search, Medal, TrendingUp, Crown, Lock
+  Search, Medal, TrendingUp, Crown, Lock, FlipHorizontal2, EyeOff
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -50,7 +50,7 @@ interface Mode {
 }
 
 /**
- * The five modes, as data rather than five near-identical JSX blocks.
+ * Every mode, as data rather than six near-identical JSX blocks.
  *
  * Tailwind classes are written out in full — the JIT compiler scans source text,
  * so a class assembled from a variable would never make it into the stylesheet.
@@ -98,7 +98,7 @@ const MODES: Mode[] = [
     key: 'challenge',
     name: 'Challenge',
     // Point and percentage scoring both live in here, chosen when a room is
-    // created — four modes on this page, not five.
+    // created — one card, two scoring rules.
     blurb: 'Real-time multiplayer, scored on points or percentage.',
     signedOutBlurb: 'Sign in to play with friends.',
     Icon: Users,
@@ -108,6 +108,32 @@ const MODES: Mode[] = [
     border: 'border-l-success',
     chip: 'bg-success/10 group-hover:bg-success/20',
     tint: 'text-success',
+  },
+  {
+    key: 'inverted',
+    name: 'Inverted',
+    blurb: 'The colour and the page arrive flipped. Rebuild the original.',
+    signedOutBlurb: 'Sign in to play inverted.',
+    Icon: FlipHorizontal2,
+    to: '/modes/inverted',
+    signedOutTo: '/login?redirect=/modes/inverted',
+    gated: true,
+    border: 'border-l-deep',
+    chip: 'bg-deep/10 group-hover:bg-deep/20',
+    tint: 'text-deep',
+  },
+  {
+    key: 'blind',
+    name: 'Blind',
+    blurb: 'Guess a colour you never saw, or rebuild one with grey sliders.',
+    signedOutBlurb: 'Sign in to play blind.',
+    Icon: EyeOff,
+    to: '/modes/blind',
+    signedOutTo: '/login?redirect=/modes/blind',
+    gated: true,
+    border: 'border-l-muted',
+    chip: 'bg-muted/10 group-hover:bg-muted/20',
+    tint: 'text-muted',
   },
 ]
 

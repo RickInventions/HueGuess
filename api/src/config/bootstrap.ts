@@ -25,7 +25,7 @@ async function userIdType(): Promise<string> {
   );
 
   const found = result.rows[0]?.data_type;
-  if (!found) throw new Error('users.id not found — cannot create friendships table');
+  if (!found) throw new Error('users.id not found — cannot create dependent tables');
   if (!USER_ID_TYPES.has(found)) throw new Error(`Unexpected users.id type: ${found}`);
   return found;
 }
@@ -51,6 +51,46 @@ function friendshipSchema(idType: string): string {
 
   CREATE INDEX IF NOT EXISTS friendships_addressee_idx ON friendships (addressee_id, status);
   CREATE INDEX IF NOT EXISTS friendships_requester_idx ON friendships (requester_id, status);
+`;
+}
+
+/**
+ * Rounds played in Inverted and Blind mode.
+ *
+ * A table of their own rather than more `game_rounds` rows: that table was
+ * created by hand outside this repo, so a CHECK constraint on its `mode` column
+ * cannot be ruled out and a new value there would fail at insert time. Nothing
+ * here feeds `competitive_stats` — the boards read best accuracy per player per
+ * (mode, difficulty) straight off this table.
+ */
+function extraModeSchema(idType: string): string {
+  return `
+  CREATE TABLE IF NOT EXISTS mode_rounds (
+    id         BIGSERIAL PRIMARY KEY,
+    user_id    ${idType} NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    mode       TEXT NOT NULL,
+    difficulty TEXT NOT NULL,
+    accuracy   NUMERIC(6,3) NOT NULL,
+    original_h INTEGER NOT NULL,
+    original_s INTEGER NOT NULL,
+    original_l INTEGER NOT NULL,
+    user_h     INTEGER NOT NULL,
+    user_s     INTEGER NOT NULL,
+    user_l     INTEGER NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT mode_rounds_mode_check
+      CHECK (mode IN ('inverted', 'blind_target', 'blind_sliders')),
+    CONSTRAINT mode_rounds_difficulty_check
+      CHECK (difficulty IN ('easy', 'medium', 'hard', 'extreme'))
+  );
+
+  -- Every board is one (mode, difficulty) ordered by accuracy, so that is the index.
+  CREATE INDEX IF NOT EXISTS mode_rounds_board_idx
+    ON mode_rounds (mode, difficulty, accuracy DESC);
+
+  -- Personal bests and the "is this a PB" check.
+  CREATE INDEX IF NOT EXISTS mode_rounds_user_idx
+    ON mode_rounds (user_id, mode, difficulty, accuracy DESC);
 `;
 }
 
@@ -132,6 +172,15 @@ export async function bootstrapSchema(): Promise<void> {
     console.log('✅ Achievement schema ready');
   } catch (error) {
     console.error('❌ Achievement schema failed:', (error as Error).message);
+  }
+
+  // Its own block, and its own userIdType() read, so a failure here cannot take
+  // the friendship schema down with it.
+  try {
+    await pool.query(extraModeSchema(await userIdType()));
+    console.log('✅ Inverted/Blind mode schema ready');
+  } catch (error) {
+    console.error('❌ Inverted/Blind mode schema failed:', (error as Error).message);
   }
 
   try {

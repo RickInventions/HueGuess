@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { useEffect, useState, useRef } from 'react'
 import { Trophy, TrendingUp, Zap } from 'lucide-react'
-import type { RoundResult, Difficulty, Achievement } from '../../types'
+import type { RoundResult, Difficulty } from '../../types'
 
 interface ResultCardProps {
   result: RoundResult
@@ -13,8 +13,7 @@ interface ResultCardProps {
     streak: number
     rankTier: string
   }
-  newlyUnlocked?: Achievement[],
-  mode?: 'casual' | 'competitive' 
+  mode?: 'casual' | 'competitive'
 }
 
 function hslString(c: { h: number; s: number; l: number }): string {
@@ -57,7 +56,7 @@ function getAccuracyMessage(accuracy: number): string {
   return 'Keep practicing.'
 }
 
-export function ResultCard({ result, difficulty, mode, huePoints, newlyUnlocked }: ResultCardProps) {
+export function ResultCard({ result, difficulty, mode, huePoints }: ResultCardProps) {
   const message = getAccuracyMessage(result.accuracy)
 
   return (
@@ -165,29 +164,8 @@ export function ResultCard({ result, difficulty, mode, huePoints, newlyUnlocked 
         </motion.div>
       )}
 
-      {/* Newly unlocked achievements */}
-      {newlyUnlocked && newlyUnlocked.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="space-y-2 pt-2"
-        >
-          <p className="text-center text-xs font-medium text-primary uppercase tracking-wider">
-            Achievements Unlocked!
-          </p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {newlyUnlocked.map((ach) => (
-              <div
-                key={ach.key}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm"
-              >
-                <span>{ach.icon}</span>
-                <span>{ach.name}</span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      )}
+      {/* Unlocks are announced by AchievementCelebration above this card — a
+          second strip of the same names here read as a duplicate. */}
     </motion.div>
   )
 }

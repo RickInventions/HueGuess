@@ -10,6 +10,7 @@ import userRoutes from './routes/user.routes.js';
 import { initializeSocketIO } from './socket/index.js';
 import authRoutes from './routes/auth.routes.js';
 import gameRoutes from './routes/game.routes.js';
+import modeRoutes from './routes/modes.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import feedbackRoutes from './routes/feedback.routes.js';
 import friendRoutes from './routes/friend.routes.js';
@@ -43,6 +44,7 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/game', gameRoutes);
+app.use('/api/modes', modeRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/leaderboard', leaderboardRoutes);  
 app.use('/api/daily', dailyRoutes);        

@@ -18,6 +18,7 @@ import Admin from './pages/Admin';
 import NotFound from './pages/NotFound';
 import Challenge from './pages/Challenge';
 import Room from './pages/Room';
+import ModeGame from './pages/ModeGame';
 import ResetPassword from './pages/ResetPassword';
 
 function App() {
@@ -86,8 +87,18 @@ function App() {
             element={isAuthenticated && isVerified ? <Challenge /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />}
           />
           <Route
-            path="/room/:code" 
-            element={isAuthenticated && isVerified ? <Room /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />} 
+            path="/room/:code"
+            element={isAuthenticated && isVerified ? <Room /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />}
+          />
+          {/* Inverted and Blind. Signed in only — a round has to be attributable
+              to put a percentage on their boards. */}
+          <Route
+            path="/modes/inverted"
+            element={isAuthenticated && isVerified ? <ModeGame family="inverted" /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />}
+          />
+          <Route
+            path="/modes/blind"
+            element={isAuthenticated && isVerified ? <ModeGame family="blind" /> : <Navigate to={isAuthenticated ? "/verify" : "/login"} />}
           />
           <Route path="/*" element={<NotFound />} />
         </Routes>

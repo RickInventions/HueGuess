@@ -5,6 +5,12 @@ import type {
   FriendRelationship,
   FriendSearchResult,
 } from '../types/friends';
+import type {
+  ExtraBoard,
+  ExtraMode,
+  ExtraRoundResponse,
+  ExtraRoundResult,
+} from '../types/modes';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
@@ -100,6 +106,39 @@ export const game = {
       memorizationSeconds,
     }),
   getDifficulties: () => api.get('/game/difficulties'),
+};
+
+/**
+ * Inverted and Blind mode.
+ *
+ * Separate from `game` because the target never travels with the request: the
+ * server issues a signed token holding it, and `submit` posts that token back
+ * with the guess. Sending the original colour from the browser — which is what
+ * `/game/submit` does — would make a mode whose whole point is not seeing the
+ * colour trivially cheatable.
+ */
+export const modes = {
+  generate: (mode: ExtraMode, difficulty: Difficulty) =>
+    api.post<ExtraRoundResponse>('/modes/generate', { mode, difficulty }),
+  submit: (token: string, userColor: HSLColor) =>
+    api.post<{ success: boolean; result: ExtraRoundResult }>('/modes/submit', {
+      token,
+      userH: userColor.h,
+      userS: userColor.s,
+      userL: userColor.l,
+    }),
+  getLeaderboard: (params: {
+    mode: ExtraMode;
+    difficulty: Difficulty;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }) => api.get<{ success: boolean; board: ExtraBoard }>('/modes/leaderboard', { params }),
+  getSummary: () =>
+    api.get<{
+      success: boolean;
+      summary: { mode: ExtraMode; difficulty: Difficulty; players: number; topAccuracy: number }[];
+    }>('/modes/summary'),
 };
 
 // Stats endpoints

@@ -141,7 +141,17 @@ export class DailyChallengeService {
     // only caller of the achievement service was the competitive round handler —
     // so all fourteen daily achievements were unreachable no matter how many
     // dailies you played.
-    const newlyUnlocked = await AchievementService.syncAchievements(userId);
+    //
+    // The submission row is already committed by this point and the daily is
+    // once per day, so an achievement failure must not throw: that would 500 a
+    // score the player can never re-submit. Losing the unlock banner is the
+    // recoverable half — the next sync recomputes it from scratch anyway.
+    let newlyUnlocked: Achievement[] = [];
+    try {
+      newlyUnlocked = await AchievementService.syncAchievements(userId);
+    } catch (error) {
+      console.error('Daily achievement sync failed:', (error as Error).message);
+    }
 
     return {
       accuracy,

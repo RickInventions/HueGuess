@@ -14,24 +14,48 @@ import {
   X,
   Zap,
 } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { leaderboard as leaderboardApi } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { RankBadge } from '../components/ui/RankBadge'
+import { ExtraBoard } from '../components/leaderboard/ExtraBoard'
 import type {
   AwardEmblem,
+  Difficulty,
   LeaderboardEntry,
   LeaderboardGlobalStats,
   LeaderboardPeriod,
   LeaderboardSortBy,
   LeaderboardSortOrder,
 } from '../types'
+import type { ExtraMode } from '../types/modes'
+import { EXTRA_DIFFICULTIES, EXTRA_MODES } from '../types/modes'
 
 const PERIODS: { key: LeaderboardPeriod; label: string; short: string }[] = [
   { key: 'all-time', label: 'All time', short: 'All time' },
   { key: 'weekly', label: 'This week', short: 'Week' },
   { key: 'daily', label: 'Today', short: 'Today' },
 ]
+
+/**
+ * Which board you are looking at. Competitive is ranked on HuePoints; the other
+ * three are ranked on raw accuracy and are partitioned by difficulty, so they
+ * cannot share one table.
+ */
+type BoardKey = 'competitive' | ExtraMode
+
+const BOARDS: { key: BoardKey; label: string }[] = [
+  { key: 'competitive', label: 'Competitive' },
+  { key: 'inverted', label: 'Inverted' },
+  { key: 'blind_target', label: 'Blind · no target' },
+  { key: 'blind_sliders', label: 'Blind · grey sliders' },
+]
+
+const isBoardKey = (value: string | null): value is BoardKey =>
+  value === 'competitive' || EXTRA_MODES.includes(value as ExtraMode)
+
+const isDifficulty = (value: string | null): value is Difficulty =>
+  EXTRA_DIFFICULTIES.includes(value as Difficulty)
 
 const medalFor = (rank: number) => (rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null)
 
@@ -61,6 +85,33 @@ function StatTile({
 export default function Leaderboard() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // Board and difficulty live in the URL so the links out of a result screen —
+  // and anything a player shares — land on the board they name.
+  const boardParam = searchParams.get('board')
+  const difficultyParam = searchParams.get('difficulty')
+  const board: BoardKey = isBoardKey(boardParam) ? boardParam : 'competitive'
+  const extraDifficulty: Difficulty = isDifficulty(difficultyParam) ? difficultyParam : 'easy'
+
+  const setBoard = (next: BoardKey) => {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'competitive') {
+      params.delete('board')
+      params.delete('difficulty')
+    } else {
+      params.set('board', next)
+      params.set('difficulty', extraDifficulty)
+    }
+    setSearchParams(params, { replace: true })
+  }
+
+  const setExtraDifficulty = (next: Difficulty) => {
+    const params = new URLSearchParams(searchParams)
+    params.set('board', board)
+    params.set('difficulty', next)
+    setSearchParams(params, { replace: true })
+  }
 
   const [period, setPeriod] = useState<LeaderboardPeriod>('all-time')
   const [sortBy, setSortBy] = useState<LeaderboardSortBy>('points')
@@ -87,6 +138,8 @@ export default function Leaderboard() {
   const requestId = useRef(0)
 
   useEffect(() => {
+    if (board !== 'competitive') return
+
     const id = ++requestId.current
     setLoading(true)
 
@@ -117,7 +170,7 @@ export default function Leaderboard() {
       .finally(() => {
         if (id === requestId.current) setLoading(false)
       })
-  }, [period, sortBy, sortOrder, debouncedSearch])
+  }, [board, period, sortBy, sortOrder, debouncedSearch])
 
   const isPeriod = period !== 'all-time'
   /** Medals only mean something on the canonical points-descending ranking. */
@@ -205,11 +258,15 @@ export default function Leaderboard() {
     )
   }
 
-  const periodNote = isPeriod
-    ? period === 'weekly'
-      ? 'Ranked on the last 7 days — only players who played in that window appear.'
-      : 'Ranked on the last 24 hours — only players who played in that window appear.'
-    : `Ranked on current HuePoints. Accounts qualify after ${minRankedGames} competitive games.`
+  const isCompetitive = board === 'competitive'
+
+  const boardNote = !isCompetitive
+    ? 'Ranked on your best single round — percentage only, no HuePoints and no rank.'
+    : isPeriod
+      ? period === 'weekly'
+        ? 'Ranked on the last 7 days — only players who played in that window appear.'
+        : 'Ranked on the last 24 hours — only players who played in that window appear.'
+      : `Ranked on current HuePoints. Accounts qualify after ${minRankedGames} competitive games.`
 
   const emptyMessage = debouncedSearch
     ? `No ranked player matched “${debouncedSearch}”.`
@@ -241,14 +298,37 @@ export default function Leaderboard() {
             <h1 className="font-heading text-2xl font-bold text-deep sm:text-3xl md:text-4xl">
               Leaderboard
             </h1>
-            <p className="mt-1 text-xs text-muted sm:text-sm">{periodNote}</p>
+            <p className="mt-1 text-xs text-muted sm:text-sm">{boardNote}</p>
           </div>
           {/* Balances the exit button so the title stays optically centred. */}
           <div className="w-[68px] shrink-0 sm:w-[76px]" aria-hidden="true" />
         </div>
 
+        {/* ── Which board ─────────────────────────────────────────────────── */}
+        <div
+          role="tablist"
+          aria-label="Board"
+          className="mb-4 flex gap-1 overflow-x-auto rounded-button bg-surface-alt p-1 sm:mb-6"
+        >
+          {BOARDS.map(item => (
+            <button
+              key={item.key}
+              role="tab"
+              aria-selected={board === item.key}
+              onClick={() => setBoard(item.key)}
+              className={`flex-1 whitespace-nowrap rounded-button px-3 py-2 text-xs font-medium transition-colors cursor-pointer sm:text-sm ${
+                board === item.key
+                  ? 'bg-surface text-deep shadow-card'
+                  : 'text-muted hover:text-deep'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
         {/* ── Global stats ────────────────────────────────────────────────── */}
-        {globalStats && (
+        {isCompetitive && globalStats && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -281,7 +361,7 @@ export default function Leaderboard() {
         )}
 
         {/* ── Awards ──────────────────────────────────────────────────────── */}
-        {awards.length > 0 && (
+        {isCompetitive && awards.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -320,27 +400,29 @@ export default function Leaderboard() {
           className="mb-3 space-y-2.5 sm:mb-4"
         >
           <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-            <div
-              role="tablist"
-              aria-label="Leaderboard period"
-              className="flex gap-1 rounded-button bg-surface-alt p-1"
-            >
-              {PERIODS.map(item => (
-                <button
-                  key={item.key}
-                  role="tab"
-                  aria-selected={period === item.key}
-                  onClick={() => setPeriod(item.key)}
-                  className={`flex-1 whitespace-nowrap rounded-button px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer sm:text-sm ${
-                    period === item.key
-                      ? 'bg-surface text-deep shadow-card'
-                      : 'text-muted hover:text-deep'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+            {isCompetitive && (
+              <div
+                role="tablist"
+                aria-label="Leaderboard period"
+                className="flex gap-1 rounded-button bg-surface-alt p-1"
+              >
+                {PERIODS.map(item => (
+                  <button
+                    key={item.key}
+                    role="tab"
+                    aria-selected={period === item.key}
+                    onClick={() => setPeriod(item.key)}
+                    className={`flex-1 whitespace-nowrap rounded-button px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer sm:text-sm ${
+                      period === item.key
+                        ? 'bg-surface text-deep shadow-card'
+                        : 'text-muted hover:text-deep'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div className="relative flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -366,27 +448,30 @@ export default function Leaderboard() {
             </div>
           </div>
 
-          {/* Desktop sorts live on the table headers; phones get pills. */}
-          <div className="flex flex-wrap items-center gap-1.5 md:hidden">
-            <span className="text-[11px] uppercase tracking-wider text-muted">Sort</span>
-            {columns.map(column => (
-              <button
-                key={column.key}
-                onClick={() => toggleSort(column.key)}
-                className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer ${
-                  sortBy === column.key
-                    ? 'border-primary/40 bg-primary/10 text-deep'
-                    : 'border-border bg-surface text-muted'
-                }`}
-              >
-                {column.shortLabel}
-                {sortIndicator(column.key)}
-              </button>
-            ))}
-          </div>
+          {/* Desktop sorts live on the table headers; phones get pills. The other
+              boards sort one way only, so they get none. */}
+          {isCompetitive && (
+            <div className="flex flex-wrap items-center gap-1.5 md:hidden">
+              <span className="text-[11px] uppercase tracking-wider text-muted">Sort</span>
+              {columns.map(column => (
+                <button
+                  key={column.key}
+                  onClick={() => toggleSort(column.key)}
+                  className={`rounded-full border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer ${
+                    sortBy === column.key
+                      ? 'border-primary/40 bg-primary/10 text-deep'
+                      : 'border-border bg-surface text-muted'
+                  }`}
+                >
+                  {column.shortLabel}
+                  {sortIndicator(column.key)}
+                </button>
+              ))}
+            </div>
+          )}
         </motion.div>
 
-        {error && (
+        {isCompetitive && error && (
           <div className="mb-3 flex items-start gap-2 rounded-card border border-accent/20 bg-accent/10 p-3 text-sm text-accent">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{error}</span>
@@ -394,6 +479,15 @@ export default function Leaderboard() {
         )}
 
         {/* ── Board ───────────────────────────────────────────────────────── */}
+        {!isCompetitive ? (
+          <ExtraBoard
+            mode={board}
+            difficulty={extraDifficulty}
+            onDifficultyChange={setExtraDifficulty}
+            search={debouncedSearch}
+            username={user?.username}
+          />
+        ) : (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }}>
           <div className="overflow-hidden rounded-card border border-border bg-surface shadow-card">
             {/* Table on md and up */}
@@ -579,11 +673,12 @@ export default function Leaderboard() {
             </p>
           )}
         </motion.div>
+        )}
 
         {/* Without this, an unqualified player just sees a board they are missing
             from and no reason why. Suppressed while searching, where their own
             absence from the results means nothing. */}
-        {!loading && !!user && !debouncedSearch && !youAreListed && (
+        {isCompetitive && !loading && !!user && !debouncedSearch && !youAreListed && (
           <div className="mt-4 flex items-start gap-2 rounded-card border border-border bg-surface p-3.5 text-xs text-muted shadow-card sm:text-sm">
             <Trophy className="mt-0.5 h-4 w-4 shrink-0 text-muted" />
             <span>
