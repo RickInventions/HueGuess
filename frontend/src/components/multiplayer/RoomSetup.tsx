@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
-import { Clock, Eye, Play, Hash, Users, Save, Shuffle, Skull, Swords, Sliders } from 'lucide-react'
+import { Clock, Contrast, Eye, Play, Hash, Users, Save, Shuffle, Skull, Swords, Sliders } from 'lucide-react'
 import { Button } from '../ui/Button'
-import type { RoomConfig, RoomMode } from '../../types/multiplayer'
+import type { RoomConfig, RoomMode, RoomVisualMode } from '../../types/multiplayer'
 import type { Difficulty } from '../../types'
 
 interface RoomSetupProps {
@@ -48,6 +48,30 @@ const SCORING_BLURB: Record<RoomMode, string> = {
 
 /** Room capacity choices. Must stay inside the server's MIN/MAX_PLAYERS bounds. */
 const PLAYER_COUNTS = [2, 3, 4, 5, 6, 7, 8]
+
+/**
+ * The single-player Inverted and Blind modes, offered as a room rule.
+ *
+ * Same four wire values as the solo `ExtraMode` union, and the same mechanics
+ * behind them — none of these changes how a guess is scored, only what you are
+ * allowed to look at while making it.
+ */
+const VISUALS: { mode: RoomVisualMode; label: string; hint: string }[] = [
+  { mode: 'normal', label: 'Normal', hint: 'Shown as it is' },
+  { mode: 'inverted', label: 'Inverted', hint: 'Complement shown' },
+  { mode: 'blind_target', label: 'No target', hint: 'Never shown' },
+  { mode: 'blind_sliders', label: 'Grey sliders', hint: 'No preview' },
+]
+
+const VISUAL_BLURB: Record<RoomVisualMode, string> = {
+  normal: 'The colour is shown the way it is scored.',
+  inverted:
+    'Everyone is shown the complement of the target. Flip it back in your head — the original is still the answer.',
+  blind_target:
+    'The target is never shown. There is no memorization phase at all: rounds open straight on the sliders.',
+  blind_sliders:
+    'The target is shown as normal, then the sliders lose all colour — no preview to check yourself against.',
+}
 
 /** Elimination cadence choices. Must match MIN/MAX_ELIM_EVERY on the server. */
 const ELIM_CADENCES = [1, 2, 3, 4, 5]
@@ -235,6 +259,12 @@ export function RoomSetup({
   const [sliderShuffle, setSliderShuffle] = useState(initialConfig?.sliderShuffle ?? false)
   const [elimination, setElimination] = useState(initialConfig?.elimination ?? false)
   const [elimEveryRounds, setElimEveryRounds] = useState(initialConfig?.elimEveryRounds ?? 2)
+  const [visualMode, setVisualMode] = useState<RoomVisualMode>(
+    initialConfig?.visualMode ?? 'normal'
+  )
+
+  /** No target means no memorization phase, so there is no reveal to time. */
+  const showsColor = visualMode !== 'blind_target'
 
   // Percentage is the original Challenge scoring, so it stays the default for a
   // new room. Editable in the lobby too: the server refuses a config change once
@@ -266,6 +296,7 @@ export function RoomSetup({
       sliderShuffle,
       elimination: elimOn,
       elimEveryRounds,
+      visualMode,
     })
   }
 
@@ -322,6 +353,39 @@ export function RoomSetup({
           </div>
         </Field>
 
+        <Field
+          icon={<Contrast className="w-4 h-4" />}
+          label="Colour mode"
+          value={VISUALS.find(v => v.mode === visualMode)?.label}
+        >
+          {/* Two-up on a phone — four of these across a 320px modal would clip
+              the longer labels. */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {VISUALS.map(option => {
+              const active = visualMode === option.mode
+              return (
+                <button
+                  key={option.mode}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setVisualMode(option.mode)}
+                  className={`rounded-button px-2 py-2 text-left transition-all cursor-pointer ${
+                    active
+                      ? 'bg-primary text-white shadow-glow-primary'
+                      : 'bg-surface-alt text-muted hover:text-deep'
+                  }`}
+                >
+                  <span className="block text-xs font-semibold">{option.label}</span>
+                  <span className={`block text-[11px] ${active ? 'text-white/85' : 'text-muted'}`}>
+                    {option.hint}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-xs text-muted">{VISUAL_BLURB[visualMode]}</p>
+        </Field>
+
         <Field icon={<Users className="w-4 h-4" />} label="Max players" value={`${maxPlayers}`}>
           <div className="grid grid-cols-7 gap-1.5">
             {PLAYER_COUNTS.map(count => {
@@ -363,8 +427,10 @@ export function RoomSetup({
         <Field
           icon={<Eye className="w-4 h-4" />}
           label="Colour shown for"
-          value={`${colorTimeSeconds}s`}
+          value={showsColor ? `${colorTimeSeconds}s` : '—'}
         >
+          {/* Kept, not hidden: switching No target back off should return the
+              reveal time you had picked rather than a fresh default. */}
           <input
             title="Color Visibility Duration"
             type="range"
@@ -372,13 +438,22 @@ export function RoomSetup({
             max={7}
             step={0.5}
             value={colorTimeSeconds}
+            disabled={!showsColor}
             onChange={e => setColorTimeSeconds(Number(e.target.value))}
-            className="w-full accent-primary cursor-pointer"
+            className={`w-full accent-primary ${
+              showsColor ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'
+            }`}
           />
-          <div className="flex justify-between text-[11px] text-muted">
-            <span>0.5s</span>
-            <span>7s</span>
-          </div>
+          {showsColor ? (
+            <div className="flex justify-between text-[11px] text-muted">
+              <span>0.5s</span>
+              <span>7s</span>
+            </div>
+          ) : (
+            <p className="text-[11px] text-muted">
+              No target never shows the colour, so there is nothing to time.
+            </p>
+          )}
         </Field>
       </Section>
 

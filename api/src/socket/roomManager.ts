@@ -13,6 +13,9 @@ import {
 import { HSLColor, DIFFICULTY_CONFIGS } from '../types/game.types.js';
 import { generateRandomColor, calculateAccuracy, validateHSL } from '../utils/hsl.utils.js';
 import { VoiceService } from '../services/voice.service.js';
+// The same involution the single-player Inverted mode runs on, imported rather
+// than copied so the two can never drift into showing different colours.
+import { complement } from '../services/modes.service.js';
 
 /** Unambiguous charset — no 0/O or 1/I, so codes can be read out loud. */
 const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -461,7 +464,7 @@ class RoomManager {
     return Math.max(1, (Math.max(2, this.getActiveCount(room)) - 1) * every);
   }
 
-  /** Begin the memorization phase of the current round. Stats are preserved. */
+  /** Begin the current round. Stats are preserved. */
   startRound(roomCode: string): { room: Room; color: HSLColor } | null {
     const room = this.getRoom(roomCode);
     if (!room) return null;
@@ -471,12 +474,19 @@ class RoomManager {
     const config = DIFFICULTY_CONFIGS[room.config.difficulty];
     const color = generateRandomColor(config.saturationRange, config.lightnessRange);
 
-    room.phase = 'memorization';
+    // Blind's no-target variant has nothing to memorize, so it has no
+    // memorization phase either — the round opens on the sliders. Scheduling a
+    // reveal of a colour nobody may see would only be a pause with a timer bar
+    // counting down over an empty screen.
+    const skipReveal = room.config.visualMode === 'blind_target';
+
+    room.phase = skipReveal ? 'reconstruction' : 'memorization';
     room.currentColor = color;
     room.lastColor = color;
     room.startColor = room.config.sliderShuffle ? this.generateStartColor(color) : undefined;
     room.roundStartTime = new Date();
-    room.phaseEndsAt = Date.now() + room.config.colorTimeSeconds * 1000;
+    room.phaseEndsAt =
+      Date.now() + (skipReveal ? room.config.roundTimeSeconds : room.config.colorTimeSeconds) * 1000;
     room.roundResults.clear();
     // Reactions belong to the round they were left on.
     room.reactions.clear();
@@ -488,6 +498,26 @@ class RoomManager {
     }
 
     return { room, color };
+  }
+
+  /**
+   * What the players are allowed to see this round, which is not always the
+   * colour they are being scored against.
+   *
+   * `currentColor` is the answer — `submitGuess` measures against it — so the
+   * transformation happens here, on the way out, rather than by storing a
+   * doctored colour that scoring would then have to undo.
+   */
+  visibleColor(room: Room): HSLColor | null {
+    if (!room.currentColor) return null;
+    switch (room.config.visualMode) {
+      case 'blind_target':
+        return null;
+      case 'inverted':
+        return complement(room.currentColor);
+      default:
+        return room.currentColor;
+    }
   }
 
   /**
@@ -912,7 +942,7 @@ class RoomManager {
       phase: room.phase,
       currentRound: room.currentRound,
       totalRounds: room.totalRounds,
-      color: room.phase === 'memorization' ? room.currentColor ?? null : null,
+      color: room.phase === 'memorization' ? this.visibleColor(room) : null,
       // The answer, revealed only once the round is over.
       targetColor: room.phase === 'results' || room.phase === 'ended' ? room.lastColor ?? null : null,
       // Where the sliders start. Sent through memorization too, so the reconstruction

@@ -12,6 +12,7 @@ import {
   SubmitColorInput,
   RoomConfig,
   RoomMode,
+  RoomVisualMode,
   Room,
   SocketUser,
   GameEndReason,
@@ -132,6 +133,7 @@ function roomPayload(room: Room) {
 
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'extreme'];
 const ROOM_MODES: RoomMode[] = ['challenge', 'duel'];
+const VISUAL_MODES: RoomVisualMode[] = ['normal', 'inverted', 'blind_target', 'blind_sliders'];
 
 /** Elimination cadence bounds. Keep in sync with the frontend room setup control. */
 const MIN_ELIM_EVERY = 1;
@@ -165,6 +167,7 @@ function parseConfig(input: Partial<RoomConfig> | undefined): RoomConfig {
    */
   const elimination = raw.elimination === true && mode !== 'duel';
   const elimEveryRounds = Math.round(Number(raw.elimEveryRounds ?? 2));
+  const visualMode = (raw.visualMode ?? 'normal') as RoomVisualMode;
 
   if (!Number.isFinite(roundTimeSeconds) || roundTimeSeconds < 10 || roundTimeSeconds > 40) {
     throw new Error('Round time must be between 10 and 40 seconds');
@@ -177,6 +180,9 @@ function parseConfig(input: Partial<RoomConfig> | undefined): RoomConfig {
   }
   if (!ROOM_MODES.includes(mode)) {
     throw new Error('Invalid game mode');
+  }
+  if (!VISUAL_MODES.includes(visualMode)) {
+    throw new Error('Invalid colour mode');
   }
   if (!Number.isFinite(maxPlayers) || maxPlayers < MIN_PLAYERS || maxPlayers > MAX_PLAYERS) {
     throw new Error(`Max players must be between ${MIN_PLAYERS} and ${MAX_PLAYERS}`);
@@ -204,6 +210,7 @@ function parseConfig(input: Partial<RoomConfig> | undefined): RoomConfig {
     sliderShuffle,
     elimination,
     elimEveryRounds,
+    visualMode,
   };
 }
 
@@ -291,12 +298,18 @@ function beginRound(io: Server, roomCode: string, kind: 'new' | 'next'): void {
     return;
   }
 
-  const { room, color } = result;
+  const { room } = result;
 
   io.to(roomCode).emit('round_started', {
     round: room.currentRound,
     totalRounds: room.totalRounds,
-    color,
+    // What the players may see, which is the complement in Inverted and nothing
+    // at all in Blind's no-target variant. `color` from startRound is the answer
+    // and stays on the server.
+    color: roomManager.visibleColor(room),
+    // A no-target round opens straight on the sliders. Sent explicitly so the
+    // client never renders a memorization screen it is about to replace.
+    phase: room.phase,
     // Where the sliders should start (slider shuffle). Sent this early so the
     // client can seat them during memorization, before they're on screen.
     startColor: room.startColor ?? null,
@@ -306,6 +319,17 @@ function beginRound(io: Server, roomCode: string, kind: 'new' | 'next'): void {
     serverTime: Date.now(),
     players: players(room),
   });
+
+  // Already reconstructing: there is no reveal to end, so the round's own clock
+  // is the next thing to schedule.
+  if (room.phase === 'reconstruction') {
+    clearTimer(roomCode, 'reconstruction');
+    getTimers(roomCode).reconstruction = setTimeout(
+      () => endRound(io, roomCode),
+      room.config.roundTimeSeconds * 1000 + SUBMIT_GRACE_MS
+    );
+    return;
+  }
 
   clearTimer(roomCode, 'memorization');
   getTimers(roomCode).memorization = setTimeout(

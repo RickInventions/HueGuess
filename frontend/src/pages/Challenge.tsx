@@ -295,9 +295,13 @@ export default function Challenge() {
             <p className="text-xs text-muted">Share this code with friends to join</p>
           </Card>
 
+            {/* Gated on the live phase, not `currentRoom.phase`: the room object
+                only re-learns its phase from a snapshot, so after the host ended
+                a session it still read `ended` here and the Edit button stayed
+                hidden until the page was reloaded. */}
             <RoomSettings
               config={currentRoom.config}
-              canEdit={currentPlayer?.isHost && currentRoom.phase === 'waiting'}
+              canEdit={!!currentPlayer?.isHost && phase === 'waiting'}
               playerCount={players.length}
               onSave={updateRoomConfig}
               disabled={!canAct}

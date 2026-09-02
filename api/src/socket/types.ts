@@ -54,6 +54,20 @@ export interface PlayerDTO {
   currentAccuracy?: number;
 }
 
+/**
+ * What the room does to the colour on its way to the players' eyes.
+ *
+ * The values match the single-player `ExtraMode` union deliberately: the
+ * mechanics are the same ones, so the wording, the scoring and the leaderboards
+ * all keep meaning the same thing whichever way you reached them.
+ *
+ * - `normal` — show the colour as it is.
+ * - `inverted` — show its complement; you invert it back yourself.
+ * - `blind_target` — never show it. No memorization phase at all.
+ * - `blind_sliders` — show it, then take every trace of colour off the sliders.
+ */
+export type RoomVisualMode = 'normal' | 'inverted' | 'blind_target' | 'blind_sliders';
+
 export interface RoomConfig {
   roundTimeSeconds: number;    // RT - reconstruction time
   colorTimeSeconds: number;    // CT - memorization time
@@ -66,6 +80,8 @@ export interface RoomConfig {
   /** Battle royale: drop the lowest scorer every `elimEveryRounds` rounds. */
   elimination: boolean;
   elimEveryRounds: number;
+  /** Inverted / Blind, or none of them. Never changes how a guess is scored. */
+  visualMode: RoomVisualMode;
 }
 
 /**

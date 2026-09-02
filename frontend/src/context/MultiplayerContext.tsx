@@ -495,8 +495,16 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     const onRoundStarted = (data: {
       round: number;
       totalRounds: number | null;
-      color: HSLColor;
+      /** Null in Blind's no-target variant: there is nothing to show. */
+      color: HSLColor | null;
       startColor?: HSLColor | null;
+      /**
+       * Which phase the round actually opens in. Normally memorization, but a
+       * no-target round has nothing to memorize and starts on the sliders — sent
+       * by the server rather than inferred, so there is never a frame of
+       * memorization UI before it corrects itself.
+       */
+      phase?: GamePhase;
       colorDuration: number;
       roundDuration: number;
       phaseEndsAt: number;
@@ -504,12 +512,12 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
     }) => {
       setCurrentRound(data.round);
       setTotalRounds(data.totalRounds);
-      setCurrentColor(data.color);
+      setCurrentColor(data.color ?? null);
       setTargetColor(null);
       setStartColor(data.startColor ?? null);
       setReactions({});
       setLastEliminated(null);
-      setPhase('memorization');
+      setPhase(data.phase ?? 'memorization');
       setPhaseEndsAt(data.phaseEndsAt ?? null);
       setPlayers(data.players);
       setRoundResults([]);
@@ -521,6 +529,10 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       setHasSubmitted(false);
       setCountdown(null);
       setIsFinalRound(false);
+      // A live round is proof the room is not over. Left set, this bounced anyone
+      // who had sat through an earlier "host ended the session" straight back to
+      // the lobby — which sent them here again, in a loop, until they reloaded.
+      setSessionEnded(false);
       setError(null);
     };
 
@@ -673,27 +685,51 @@ export function MultiplayerProvider({ children }: { children: React.ReactNode })
       setSessionEnded(false);
     };
 
+    /**
+     * The host closed the game down. The room itself survives — everyone stays
+     * in it, back in the lobby — so this resets exactly as much as `room_reset`
+     * does. It used to reset less, and the leftovers were both visible bugs:
+     * the room object kept `phase: 'ended'`, which is what the lobby reads to
+     * decide whether the host may edit the settings, and `sessionEnded` stayed
+     * true, which bounced that host straight back out of the next game.
+     */
     const onSessionEnded = (data: {
       message?: string;
       players: Player[];
       status: GamePhase;
+      config?: RoomConfig;
       hostSocketId: string | null;
     }) => {
       setPhase(data.status ?? 'waiting');
       setPlayers(data.players ?? []);
       setCurrentRoom(prev =>
-        prev ? { ...prev, players: data.players ?? prev.players, hostSocketId: data.hostSocketId, currentRound: 0 } : prev
+        prev
+          ? {
+              ...prev,
+              players: data.players ?? prev.players,
+              phase: data.status ?? 'waiting',
+              config: data.config ?? prev.config,
+              hostSocketId: data.hostSocketId,
+              currentRound: 0,
+            }
+          : prev
       );
       setCurrentRound(0);
       setRoundResults([]);
       setLeaderboard([]);
       setCurrentColor(null);
       setTargetColor(null);
+      setStartColor(null);
+      setReactions({});
+      setLastEliminated(null);
       setPhaseEndsAt(null);
       setCountdown(null);
       setSubmittedCount(0);
       setHasSubmitted(false);
+      setPlayAgainVotes(0);
       setGameEndReason(null);
+      setIsFinalRound(false);
+      setError(null);
       setSessionEnded(true);
       toast.info(data.message || 'Host ended the session');
     };

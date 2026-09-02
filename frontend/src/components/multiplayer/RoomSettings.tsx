@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Clock, Eye, Hash, Settings2, Shuffle, Skull, Sliders, Swords, Users } from 'lucide-react'
+import { Clock, Contrast, Eye, Hash, Settings2, Shuffle, Skull, Sliders, Swords, Users } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { RoomSetup } from './RoomSetup'
 import type { RoomConfig } from '../../types/multiplayer'
@@ -19,6 +19,14 @@ interface RoomSettingsProps {
 const SCORING_LABEL: Record<RoomConfig['mode'], { name: string; hint: string }> = {
   duel: { name: 'Point mode', hint: 'A point a round to the closest guess' },
   challenge: { name: 'Percentage mode', hint: 'Ranked on average accuracy' },
+}
+
+/** Chip copy for the colour twists. `normal` is the absence of a rule, so it has none. */
+const VISUAL_LABEL: Record<RoomConfig['visualMode'], string | null> = {
+  normal: null,
+  inverted: 'Inverted colour',
+  blind_target: 'Blind · no target',
+  blind_sliders: 'Blind · grey sliders',
 }
 
 /**
@@ -56,7 +64,9 @@ export function RoomSettings({
     {
       icon: <Eye className="w-3.5 h-3.5" />,
       label: 'Colour shown',
-      value: `${config.colorTimeSeconds}s`,
+      // Blind's no-target variant has no memorization phase, so the reveal time
+      // on the config is a number that never gets used.
+      value: config.visualMode === 'blind_target' ? 'Never' : `${config.colorTimeSeconds}s`,
     },
     {
       icon: <Hash className="w-3.5 h-3.5" />,
@@ -74,6 +84,10 @@ export function RoomSettings({
   // Only what is on. Elimination is never on in point mode — the server forces it
   // off — so nothing about it is shown there at all.
   const rules: { icon: ReactNode; label: string }[] = []
+  const visualLabel = VISUAL_LABEL[config.visualMode]
+  if (visualLabel) {
+    rules.push({ icon: <Contrast className="w-3.5 h-3.5" />, label: visualLabel })
+  }
   if (config.sliderShuffle) {
     rules.push({ icon: <Shuffle className="w-3.5 h-3.5" />, label: 'Slider shuffle' })
   }

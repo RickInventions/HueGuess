@@ -93,6 +93,14 @@ export default function Room() {
   // sliders and no ready gate — they watch the rest play it out.
   const isSpectator = currentPlayer?.eliminated ?? false
   const isDuel = currentRoom?.config.mode === 'duel'
+  /**
+   * The room's colour twist, if it has one. Purely about what is rendered — the
+   * server transforms the colour on its way out and still scores against the
+   * original, so nothing here touches a guess.
+   */
+  const visualMode = currentRoom?.config.visualMode ?? 'normal'
+  const isInverted = visualMode === 'inverted'
+  const isBlindTarget = visualMode === 'blind_target'
   /** Host controls only where the server accepts them: lobby and final results. */
   const kickHandler = isHost ? kickPlayer : undefined
 
@@ -125,10 +133,13 @@ export default function Room() {
     })
   }, [currentRoom, code, canAct, joinRoom, navigate])
 
-  // Host ended the session → everyone goes back to the lobby view.
+  // Host ended the session → everyone goes back to the lobby view. Gated on the
+  // phase as well as the flag: the lobby sends you straight back here the moment
+  // a round is live, so acting on a stale "session ended" would ping-pong
+  // between the two screens rather than leave one of them.
   useEffect(() => {
-    if (sessionEnded) navigate('/challenge', { replace: true })
-  }, [sessionEnded, navigate])
+    if (sessionEnded && phase === 'waiting') navigate('/challenge', { replace: true })
+  }, [sessionEnded, phase, navigate])
 
   // Left the room entirely (kicked, dissolved) → leave the screen.
   useEffect(() => {
@@ -170,12 +181,16 @@ export default function Room() {
 
   // ── Round reset ───────────────────────────────────────────────────────────
   useEffect(() => {
-    if (phase === 'memorization') {
+    // A round normally opens on memorization, which is where the sliders get put
+    // back. Blind's no-target variant has no memorization phase at all, so it has
+    // to reset on the only phase it ever has — without this, its round two starts
+    // on round one's guess, already marked as touched.
+    if (phase === 'memorization' || (isBlindTarget && phase === 'reconstruction')) {
       setUserColor(sliderStart)
       touchedRef.current = false
       autoSubmittedRef.current = null
     }
-  }, [phase, currentRound, sliderStart])
+  }, [phase, currentRound, sliderStart, isBlindTarget])
 
   /**
    * Adopt the round's shuffled start whenever it arrives and the player hasn't
@@ -677,7 +692,15 @@ export default function Room() {
                   className="w-full aspect-square max-w-[240px] sm:max-w-[280px] mx-auto rounded-2xl shadow-card"
                   style={{ backgroundColor: `hsl(${currentColor.h}, ${currentColor.s}%, ${currentColor.l}%)` }}
                 />
-                <p className="text-center text-sm text-muted">Memorize this color</p>
+                <p className="text-center text-sm text-muted">
+                  {isInverted ? 'Memorize the flipped colour' : 'Memorize this color'}
+                </p>
+                {isInverted && (
+                  <p className="text-center text-xs text-muted">
+                    You're being shown the complement — invert it back yourself, then match the
+                    original.
+                  </p>
+                )}
               </motion.div>
             )}
 
@@ -693,6 +716,21 @@ export default function Room() {
                   spectatorBanner
                 ) : (
                   <>
+                    {/* Blind's no-target rounds open straight here, with nothing
+                        having been shown — say so, or an empty memorization
+                        phase just looks like something failed to load. */}
+                    {isBlindTarget && (
+                      <p className="rounded-card border border-border bg-surface-alt p-3 text-center text-xs text-muted">
+                        No target this round — guess a colour blind. Everyone is working from the
+                        same nothing.
+                      </p>
+                    )}
+                    {isInverted && (
+                      <p className="rounded-card border border-border bg-surface-alt p-3 text-center text-xs text-muted">
+                        You were shown the complement — match the original colour, not the one on
+                        screen.
+                      </p>
+                    )}
                     <ColorSliders
                       color={userColor}
                       onChange={(channel, value) => {
@@ -701,6 +739,7 @@ export default function Room() {
                       }}
                       disabled={hasSubmitted}
                       onSubmit={handleSubmit}
+                      plain={visualMode === 'blind_sliders'}
                     />
                     <Button
                       fullWidth

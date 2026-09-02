@@ -11,6 +11,15 @@ export type GameEndReason =
 /** How a room scores itself. Duel awards a point per round win; challenge averages accuracy. */
 export type RoomMode = 'challenge' | 'duel';
 
+/**
+ * What the room does to the colour on its way to the players' eyes.
+ *
+ * Deliberately the same four values as the single-player `ExtraMode` union, so
+ * the wording and the mechanics keep meaning the same thing whichever way you
+ * reached them. None of them changes how a guess is scored.
+ */
+export type RoomVisualMode = 'normal' | 'inverted' | 'blind_target' | 'blind_sliders';
+
 export interface Player {
   socketId: string;
   userId: string;
@@ -38,6 +47,8 @@ export interface RoomConfig {
   /** Battle royale: drop the lowest scorer every `elimEveryRounds` rounds. */
   elimination: boolean;
   elimEveryRounds: number;
+  /** Inverted / Blind, or none of them. Never changes how a guess is scored. */
+  visualMode: RoomVisualMode;
 }
 
 export interface Room {
