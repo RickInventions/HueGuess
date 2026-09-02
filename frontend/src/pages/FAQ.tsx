@@ -279,7 +279,7 @@ const faqCategories: FAQCategory[] = [
       {
         question: 'What are the Inverted and Blind boards at the top of the page?',
         answer:
-          'Four separate boards live behind that row of tabs. Competitive is the HuePoints ladder. Inverted, Blind · no target and Blind · grey sliders are ranked purely on accuracy — your single best round, ties going to whoever got there first — and each of them splits again by difficulty, because an easy 98% and an extreme 98% are not the same achievement. There is no minimum number of rounds on those three: one score puts you on the board.',
+          'Four separate boards live behind that row of tabs. Competitive is the HuePoints ladder. Inverted, Blind · no target and Blind · grey sliders are ranked purely on accuracy — your single best round, ties going to whoever got there first. Each of those three opens on All: one row per player showing their best round at any difficulty, with a chip saying which difficulty it was set on. Narrow it to a single difficulty and you are compared only against rounds played under the same conditions, because an easy 98% and an extreme 98% are not the same achievement. There is no minimum number of rounds on those three: one score puts you on the board.',
         icon: <FlipHorizontal2 className="w-4 h-4" />,
       },
     ],
@@ -397,13 +397,13 @@ const faqCategories: FAQCategory[] = [
       {
         question: 'Do Inverted and Blind affect my HuePoints or rank?',
         answer:
-          'No. Neither mode awards HuePoints, moves your rank, counts towards your competitive stats or unlocks achievements. Every round is scored purely as a percentage and the only thing it can change is your position on that mode\'s own board.',
+          'No HuePoints, no rank movement and nothing added to your competitive stats — every round is scored purely as a percentage. They do have achievements of their own, though: a whole Inverted & Blind set covering rounds played and best accuracy in each variant, including a few that only Extreme can unlock. Beyond those, the only thing a round can change is your position on that mode\'s own board.',
         icon: <Trophy className="w-4 h-4" />,
       },
       {
         question: 'How does difficulty work in these modes?',
         answer:
-          'The same four levels as everywhere else, and they matter more here: harder difficulties draw the target from a wider saturation and lightness range, and give you less time. Each difficulty is a separate leaderboard, so you are only ever ranked against people who took on the same conditions. Blind · no target has no memorization phase at all — its clock is the reconstruction timer.',
+          'The same four levels as everywhere else, and they matter more here: harder difficulties draw the target from a wider saturation and lightness range, and give you less time. The board opens on All, which ranks everyone\'s best round whatever difficulty it was set on and labels each row with the one it came from; pick a single difficulty to be ranked only against people who took on the same conditions. Blind · no target has no memorization phase at all — its clock is the reconstruction timer.',
         icon: <Zap className="w-4 h-4" />,
       },
       {
@@ -519,7 +519,7 @@ const faqCategories: FAQCategory[] = [
       {
         question: 'How many achievements are there?',
         answer:
-          '100, across nine categories: Accuracy, Volume, Streaks, Rank, Difficulty, Speed, Daily, Social and Meta. Use the tabs and the search box on the Achievements page rather than scrolling — a flat list of 100 is mostly locked cards.',
+          '126, across ten categories: Accuracy, Volume, Streaks, Rank, Difficulty, Speed, Daily, Inverted & Blind, Social and Meta. Use the tabs and the search box on the Achievements page rather than scrolling — a flat list that long is mostly locked cards.',
         icon: <Award className="w-4 h-4" />,
       },
       {
@@ -531,13 +531,13 @@ const faqCategories: FAQCategory[] = [
       {
         question: 'How do I know when I unlock one?',
         answer:
-          'A card appears over the result screen the moment it happens, listing everything that round earned, with a chime. They also stay on the result card as chips. Anything you have not looked at yet is floated to the top of the Achievements page with an orange New badge, which clears once you have opened the page.',
+          'A celebration card appears in the result screen the moment it happens, listing everything that round earned, with a chime. It is part of the page rather than a pop-up, so it does not cover the score you just earned. Anything you have not looked at yet is floated to the top of the Achievements page with an orange New badge, which clears once you have opened the page.',
         icon: <Sparkles className="w-4 h-4" />,
       },
       {
         question: 'Which modes can unlock achievements?',
         answer:
-          'Competitive rounds and the Daily Challenge — 14 of them are daily-specific, for playing, streaks, accuracy and speed on the daily colour. Challenge rooms unlock nothing, because a room only exists while people are in it and leaves no record to award from.',
+          'Competitive rounds, the Daily Challenge, and Inverted and Blind. 14 are daily-specific, for playing, streaks, accuracy and speed on the daily colour; 26 belong to Inverted and Blind, covering rounds played and best accuracy in each variant. Casual and Challenge rooms unlock nothing — a room only exists while people are in it and leaves no record to award from.',
         icon: <Target className="w-4 h-4" />,
       },
       {

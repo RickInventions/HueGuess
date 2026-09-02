@@ -1,4 +1,4 @@
-import type { Difficulty, HSLColor } from './index'
+import type { Achievement, Difficulty, HSLColor } from './index'
 
 /**
  * The two modes that sit outside the ladder — Inverted and Blind — with Blind
@@ -12,6 +12,31 @@ export type ExtraMode = 'inverted' | 'blind_target' | 'blind_sliders'
 export const EXTRA_MODES: ExtraMode[] = ['inverted', 'blind_target', 'blind_sliders']
 
 export const EXTRA_DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'extreme']
+
+/**
+ * What a board can be filtered to. `all` is the default: still one row per
+ * player, but their best round at any difficulty, with the row saying which.
+ */
+export type BoardDifficulty = Difficulty | 'all'
+
+export const BOARD_DIFFICULTIES: BoardDifficulty[] = ['all', ...EXTRA_DIFFICULTIES]
+
+/** Short capitalised labels, since the wire values are lowercase. */
+export const DIFFICULTY_LABELS: Record<BoardDifficulty, string> = {
+  all: 'All',
+  easy: 'Easy',
+  medium: 'Medium',
+  hard: 'Hard',
+  extreme: 'Extreme',
+}
+
+/** Difficulty chips on the board. Extreme reads as the warning it is. */
+export const DIFFICULTY_CHIPS: Record<Difficulty, string> = {
+  easy: 'bg-success/10 text-success',
+  medium: 'bg-primary/10 text-primary',
+  hard: 'bg-accent/10 text-accent',
+  extreme: 'bg-deep/10 text-deep',
+}
 
 /**
  * One place that names each mode, because the play page, the home cards, the
@@ -65,14 +90,14 @@ export interface ExtraRoundResult {
   accuracy: number
   originalColor: HSLColor
   userColor: HSLColor
-  /** The complement that was on screen, in Inverted only. */
-  shownColor: HSLColor | null
   previousBest: number | null
   personalBest: number
   isPersonalBest: boolean
   /** Position of your personal best on this board, out of `totalPlayers`. */
   rank: number
   totalPlayers: number
+  /** Inverted and Blind award no HuePoints, but they do have achievements. */
+  newlyUnlocked?: Achievement[]
 }
 
 export interface ExtraBoardEntry {
@@ -82,6 +107,8 @@ export interface ExtraBoardEntry {
   bestAccuracy: number
   attempts: number
   achievedAt: string
+  /** Which difficulty this player's best round was played at. */
+  difficulty: Difficulty
 }
 
 export interface ExtraBoard {
@@ -90,7 +117,7 @@ export interface ExtraBoard {
   limit: number
   offset: number
   mode: ExtraMode
-  difficulty: Difficulty
+  difficulty: BoardDifficulty
 }
 
 /**

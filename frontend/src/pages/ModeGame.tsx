@@ -16,6 +16,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { ColorSliders } from '../components/game/ColorSliders'
 import { TimerBar } from '../components/game/TimerBar'
+import { AchievementCelebration } from '../components/game/AchievementCelebration'
 import { useTimer } from '../hooks/useTimer'
 import { modes as modesApi } from '../lib/api'
 import { soundService } from '../services/soundService'
@@ -551,19 +552,6 @@ export default function ModeGame({ family }: ModeGameProps) {
                   </div>
                 </div>
 
-                {result.shownColor && (
-                  <div className="mt-4 flex items-center gap-3 rounded-xl bg-surface-alt p-3 text-left">
-                    <div
-                      className="h-10 w-10 flex-shrink-0 rounded-lg border border-border"
-                      style={{ backgroundColor: hslString(result.shownColor) }}
-                    />
-                    <p className="text-xs text-muted">
-                      What you were shown — {result.shownColor.h}° {result.shownColor.s}%{' '}
-                      {result.shownColor.l}%
-                    </p>
-                  </div>
-                )}
-
                 <div className="mt-5 grid grid-cols-2 gap-3 border-t border-border pt-4 text-center">
                   <div>
                     <p className="font-heading text-lg font-semibold text-deep">
@@ -583,6 +571,10 @@ export default function ModeGame({ family }: ModeGameProps) {
                 </div>
               </div>
 
+              {/* Under the score, not over it: the number is what you came back
+                  for, and the unlock is the bonus on top of it. */}
+              <AchievementCelebration achievements={result.newlyUnlocked} />
+
               <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
                 <button
                   onClick={() => difficulty && void startRound(difficulty)}
@@ -593,7 +585,10 @@ export default function ModeGame({ family }: ModeGameProps) {
                   Again
                 </button>
                 <Link
-                  to={`/leaderboard?board=${variant}&difficulty=${result.difficulty}`}
+                  // No difficulty in the link: the board opens on `All`, which is
+                  // where your best round actually sits, labelled with the
+                  // difficulty it was set on.
+                  to={`/leaderboard?board=${variant}`}
                   className="w-full rounded-xl bg-surface-alt py-3 text-center text-sm font-semibold text-deep transition-all hover:bg-surface-muted active:scale-[0.98] sm:flex-1 sm:py-4 touch-manipulation"
                 >
                   <Trophy className="mr-2 inline h-4 w-4" />

@@ -267,7 +267,12 @@ function startCountdown(io: Server, roomCode: string, kind: 'new' | 'next'): voi
     }
 
     clearTimer(roomCode, 'countdown');
-    io.to(roomCode).emit('all_ready_countdown', { countdown: 0, totalCountdown: COUNTDOWN_SECONDS });
+    // Deliberately no `countdown: 0` tick. The client maps 0 to "no countdown",
+    // and it arrives as its own packet just before `round_started` — leaving one
+    // render where the lobby's ready-up UI, settings and player list come back
+    // before the whole page swaps to the memorization screen. That read as the
+    // entire screen flashing at the end of 3-2-1. `round_started` clears the
+    // countdown itself, so staying silent here loses nothing.
     beginRound(io, roomCode, kind);
   }, 1000);
 

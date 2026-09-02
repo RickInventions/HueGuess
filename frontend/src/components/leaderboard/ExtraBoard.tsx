@@ -2,14 +2,18 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Info, Trophy } from 'lucide-react'
 import { modes as modesApi } from '../../lib/api'
-import type { Difficulty } from '../../types'
-import type { ExtraBoardEntry, ExtraMode } from '../../types/modes'
-import { EXTRA_DIFFICULTIES, EXTRA_MODE_META } from '../../types/modes'
+import type { BoardDifficulty, ExtraBoardEntry, ExtraMode } from '../../types/modes'
+import {
+  BOARD_DIFFICULTIES,
+  DIFFICULTY_CHIPS,
+  DIFFICULTY_LABELS,
+  EXTRA_MODE_META,
+} from '../../types/modes'
 
 interface ExtraBoardProps {
   mode: ExtraMode
-  difficulty: Difficulty
-  onDifficultyChange: (difficulty: Difficulty) => void
+  difficulty: BoardDifficulty
+  onDifficultyChange: (difficulty: BoardDifficulty) => void
   /** Already debounced by the page. */
   search: string
   /** Highlights your own row. */
@@ -25,14 +29,29 @@ const when = (iso: string) => {
     : date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })
 }
 
+/** The chip that says which difficulty a row's best round was played at. */
+function DifficultyChip({ level }: { level: ExtraBoardEntry['difficulty'] }) {
+  return (
+    <span
+      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+        DIFFICULTY_CHIPS[level] ?? 'bg-surface-muted text-muted'
+      }`}
+    >
+      {DIFFICULTY_LABELS[level] ?? level}
+    </span>
+  )
+}
+
 /**
- * A board for Inverted or Blind: one row per player, ranked purely on their best
- * single-round accuracy at one difficulty.
+ * A board for Inverted or Blind: one row per player, ranked on their best single
+ * round.
  *
- * Deliberately not the competitive table. There are no HuePoints, no rank tier
- * and no qualification threshold to show, and difficulty is a hard partition
- * rather than a column — an easy 98% and an extreme 98% are not comparable, so
- * they never share a ranking.
+ * Deliberately not the competitive table — there are no HuePoints, no rank tier
+ * and no qualification threshold to show. Difficulty defaults to `All`, which is
+ * still one row per player rather than one per difficulty; a leaderboard where
+ * one person holds four adjacent places is not a ranking. Which difficulty
+ * produced that round rides along as a label instead, and picking a single
+ * difficulty compares like with like.
  */
 export function ExtraBoard({
   mode,
@@ -73,9 +92,14 @@ export function ExtraBoard({
   }, [mode, difficulty, search])
 
   const meta = EXTRA_MODE_META[mode]
+  /** The label column only earns its space on the mixed board. */
+  const showDifficulty = difficulty === 'all'
+  const columnCount = showDifficulty ? 6 : 5
   const emptyMessage = search
     ? `Nobody on this board matched “${search}”.`
-    : `No scores yet on ${meta.name} · ${difficulty}. Play a round and the board is yours.`
+    : showDifficulty
+      ? `No scores yet on ${meta.name}. Play a round and the board is yours.`
+      : `No scores yet on ${meta.name} · ${difficulty}. Play a round and the board is yours.`
 
   return (
     <div className="space-y-3">
@@ -86,24 +110,26 @@ export function ExtraBoard({
           aria-label="Difficulty"
           className="flex gap-1 overflow-x-auto rounded-button bg-surface-alt p-1"
         >
-          {EXTRA_DIFFICULTIES.map(level => (
+          {BOARD_DIFFICULTIES.map(level => (
             <button
               key={level}
               role="tab"
               aria-selected={difficulty === level}
               onClick={() => onDifficultyChange(level)}
-              className={`flex-1 whitespace-nowrap rounded-button px-3 py-1.5 text-xs font-medium capitalize transition-colors cursor-pointer sm:text-sm ${
+              className={`flex-1 whitespace-nowrap rounded-button px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer sm:text-sm ${
                 difficulty === level
                   ? 'bg-surface text-deep shadow-card'
                   : 'text-muted hover:text-deep'
               }`}
             >
-              {level}
+              {DIFFICULTY_LABELS[level]}
             </button>
           ))}
         </div>
         <p className="text-xs text-muted">
-          Each difficulty is its own board — a 98% on easy never competes with a 98% on extreme.
+          {showDifficulty
+            ? 'Everyone’s best round at any difficulty, labelled with the one it was set on. Pick a difficulty to compare like with like — a 98% on easy is not a 98% on extreme.'
+            : 'One board per difficulty — a 98% on easy never competes with a 98% on extreme.'}
         </p>
       </div>
 
@@ -126,6 +152,11 @@ export function ExtraBoard({
                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-muted">
                   Player
                 </th>
+                {showDifficulty && (
+                  <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-muted">
+                    Difficulty
+                  </th>
+                )}
                 <th scope="col" className="px-4 py-3 text-right text-xs font-medium text-deep">
                   Best accuracy
                 </th>
@@ -140,13 +171,16 @@ export function ExtraBoard({
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="py-14 text-center">
+                  <td colSpan={columnCount} className="py-14 text-center">
                     <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                   </td>
                 </tr>
               ) : entries.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-14 text-center text-sm text-muted">
+                  <td
+                    colSpan={columnCount}
+                    className="px-4 py-14 text-center text-sm text-muted"
+                  >
                     {emptyMessage}
                   </td>
                 </tr>
@@ -178,6 +212,11 @@ export function ExtraBoard({
                           )}
                         </div>
                       </td>
+                      {showDifficulty && (
+                        <td className="px-4 py-3">
+                          <DifficultyChip level={entry.difficulty} />
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-right font-heading text-sm font-semibold text-deep">
                         {entry.bestAccuracy.toFixed(1)}%
                       </td>
@@ -225,6 +264,7 @@ export function ExtraBoard({
                             You
                           </span>
                         )}
+                        {showDifficulty && <DifficultyChip level={entry.difficulty} />}
                       </div>
                       <p className="text-[11px] text-muted">
                         {entry.attempts.toLocaleString()} round

@@ -137,11 +137,6 @@ export class DailyChallengeService {
       [challengeId]
     );
 
-    // Daily submissions never triggered an achievement check before this — the
-    // only caller of the achievement service was the competitive round handler —
-    // so all fourteen daily achievements were unreachable no matter how many
-    // dailies you played.
-    //
     // The submission row is already committed by this point and the daily is
     // once per day, so an achievement failure must not throw: that would 500 a
     // score the player can never re-submit. Losing the unlock banner is the

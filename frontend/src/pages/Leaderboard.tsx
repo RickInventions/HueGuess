@@ -21,15 +21,14 @@ import { RankBadge } from '../components/ui/RankBadge'
 import { ExtraBoard } from '../components/leaderboard/ExtraBoard'
 import type {
   AwardEmblem,
-  Difficulty,
   LeaderboardEntry,
   LeaderboardGlobalStats,
   LeaderboardPeriod,
   LeaderboardSortBy,
   LeaderboardSortOrder,
 } from '../types'
-import type { ExtraMode } from '../types/modes'
-import { EXTRA_DIFFICULTIES, EXTRA_MODES } from '../types/modes'
+import type { BoardDifficulty, ExtraMode } from '../types/modes'
+import { BOARD_DIFFICULTIES, EXTRA_MODES } from '../types/modes'
 
 const PERIODS: { key: LeaderboardPeriod; label: string; short: string }[] = [
   { key: 'all-time', label: 'All time', short: 'All time' },
@@ -39,7 +38,7 @@ const PERIODS: { key: LeaderboardPeriod; label: string; short: string }[] = [
 
 /**
  * Which board you are looking at. Competitive is ranked on HuePoints; the other
- * three are ranked on raw accuracy and are partitioned by difficulty, so they
+ * three are ranked on raw accuracy and can be filtered by difficulty, so they
  * cannot share one table.
  */
 type BoardKey = 'competitive' | ExtraMode
@@ -54,8 +53,8 @@ const BOARDS: { key: BoardKey; label: string }[] = [
 const isBoardKey = (value: string | null): value is BoardKey =>
   value === 'competitive' || EXTRA_MODES.includes(value as ExtraMode)
 
-const isDifficulty = (value: string | null): value is Difficulty =>
-  EXTRA_DIFFICULTIES.includes(value as Difficulty)
+const isBoardDifficulty = (value: string | null): value is BoardDifficulty =>
+  BOARD_DIFFICULTIES.includes(value as BoardDifficulty)
 
 const medalFor = (rank: number) => (rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null)
 
@@ -92,7 +91,11 @@ export default function Leaderboard() {
   const boardParam = searchParams.get('board')
   const difficultyParam = searchParams.get('difficulty')
   const board: BoardKey = isBoardKey(boardParam) ? boardParam : 'competitive'
-  const extraDifficulty: Difficulty = isDifficulty(difficultyParam) ? difficultyParam : 'easy'
+  // `all` is the default view, and it is the one an absent parameter means — so it
+  // never needs to be in the URL. Only a narrowed board writes one.
+  const extraDifficulty: BoardDifficulty = isBoardDifficulty(difficultyParam)
+    ? difficultyParam
+    : 'all'
 
   const setBoard = (next: BoardKey) => {
     const params = new URLSearchParams(searchParams)
@@ -101,15 +104,17 @@ export default function Leaderboard() {
       params.delete('difficulty')
     } else {
       params.set('board', next)
-      params.set('difficulty', extraDifficulty)
+      if (extraDifficulty === 'all') params.delete('difficulty')
+      else params.set('difficulty', extraDifficulty)
     }
     setSearchParams(params, { replace: true })
   }
 
-  const setExtraDifficulty = (next: Difficulty) => {
+  const setExtraDifficulty = (next: BoardDifficulty) => {
     const params = new URLSearchParams(searchParams)
     params.set('board', board)
-    params.set('difficulty', next)
+    if (next === 'all') params.delete('difficulty')
+    else params.set('difficulty', next)
     setSearchParams(params, { replace: true })
   }
 

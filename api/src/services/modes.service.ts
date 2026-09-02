@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import pool from '../config/db.js';
+import { AchievementService } from './achievement.service.js';
 import { DIFFICULTY_CONFIGS, type Difficulty } from '../types/game.types.js';
 import {
   calculateAccuracy,
@@ -14,9 +15,13 @@ import {
  * Their rounds are deliberately *not* `game_rounds` rows. That table's `mode`
  * column was created by hand outside this repo, so whether it has a CHECK
  * constraint is unknowable from here and a new value in it is a coin flip at
- * runtime. These live in their own table instead, never touch
- * `competitive_stats`, and award neither HuePoints nor achievements: the boards
- * are percentage only, split by difficulty.
+ * runtime. These live in their own table instead and never touch
+ * `competitive_stats`: no HuePoints, no rank, no effect on the ladder. The boards
+ * are percentage only.
+ *
+ * They do award achievements — their own family of them, read straight off
+ * `mode_rounds` — because an unranked mode with nothing to chase is a mode
+ * nobody replays.
  */
 export type ExtraMode = 'inverted' | 'blind_target' | 'blind_sliders';
 
@@ -28,6 +33,16 @@ export const isExtraMode = (value: unknown): value is ExtraMode =>
 
 export const isDifficulty = (value: unknown): value is Difficulty =>
   DIFFICULTIES.includes(value as Difficulty);
+
+/**
+ * What a board can be filtered to. `'all'` is the default view: one row per
+ * player still, but their best round at *any* difficulty, labelled with the one
+ * it was set at.
+ */
+export type BoardDifficulty = Difficulty | 'all';
+
+export const isBoardDifficulty = (value: unknown): value is BoardDifficulty =>
+  value === 'all' || isDifficulty(value);
 
 /**
  * The colour Inverted shows you during memorization.
@@ -123,7 +138,7 @@ const likePattern = (term: string): string => `%${term.replace(/[#%_]/g, ch => `
 
 export interface BoardFilters {
   mode: ExtraMode;
-  difficulty: Difficulty;
+  difficulty: BoardDifficulty;
   search?: string;
   limit: number;
   offset: number;
@@ -197,6 +212,14 @@ export class ModesService {
 
     const best = previousBest == null ? accuracy : Math.max(previousBest, accuracy);
 
+    // The round is already committed, and these modes are replayable, so an
+    // achievement failure must not turn a scored round into a 500. Achievements
+    // are recomputed from scratch every sync, so the unlock surfaces next round.
+    const newlyUnlocked = await AchievementService.syncAchievements(userId).catch(error => {
+      console.error('Extra mode achievement sync failed:', (error as Error).message);
+      return [];
+    });
+
     // Where that best now sits on the board, counted over players rather than
     // rows — every board here is best-of-all-attempts.
     const standing = await pool.query(
@@ -214,48 +237,59 @@ export class ModesService {
       accuracy,
       originalColor: target,
       userColor: guess,
-      /** What was on screen during memorization, so the reveal makes sense. */
-      shownColor: claim.m === 'inverted' ? complement(target) : null,
       previousBest,
       personalBest: best,
       isPersonalBest: previousBest == null || accuracy > previousBest,
       rank: int(standing.rows[0]?.rank) || 1,
       totalPlayers: int(standing.rows[0]?.players),
+      newlyUnlocked,
     };
   }
 
   /**
-   * One board: best accuracy per player for a single (mode, difficulty).
+   * One board: best accuracy per player, for one mode and either a single
+   * difficulty or all of them at once.
    *
    * Ranked before the username filter is applied, the same way the competitive
    * board does it, so searching for a player shows their real position instead
    * of "#1 of the one row that matched". Ties break on who reached the score
    * first.
+   *
+   * Always one row per player, including on the `all` view — a leaderboard where
+   * one person can hold four adjacent places is not a ranking. Which difficulty
+   * produced that best round travels with the row instead, since on `all` an easy
+   * 96% and an extreme 96% are very different achievements.
    */
   static async getBoard(filters: BoardFilters) {
     const limit = Math.min(Math.max(int(filters.limit) || 100, 1), 100);
     const offset = Math.max(int(filters.offset), 0);
     const term = (filters.search ?? '').trim().slice(0, 50);
     const search = term.length > 0 ? likePattern(term) : null;
+    const difficulty = filters.difficulty === 'all' ? null : filters.difficulty;
 
     const query = `
-      WITH bests AS (
-        SELECT user_id, MAX(accuracy) AS best_accuracy, COUNT(*) AS attempts
+      WITH scoped AS (
+        SELECT user_id, difficulty, accuracy, created_at
         FROM mode_rounds
-        WHERE mode = $1 AND difficulty = $2
+        WHERE mode = $1 AND ($2::text IS NULL OR difficulty = $2)
+      ),
+      bests AS (
+        SELECT user_id, MAX(accuracy) AS best_accuracy, COUNT(*) AS attempts
+        FROM scoped
         GROUP BY user_id
       ),
+      -- The earliest round that reached the player's best, which hands us both
+      -- the tie-break timestamp and the difficulty label in one pass.
       achieved AS (
-        SELECT b.user_id, MIN(mr.created_at) AS achieved_at
-        FROM bests b
-        JOIN mode_rounds mr
-          ON mr.user_id = b.user_id
-         AND mr.mode = $1 AND mr.difficulty = $2
-         AND mr.accuracy = b.best_accuracy
-        GROUP BY b.user_id
+        SELECT DISTINCT ON (s.user_id)
+               s.user_id, s.created_at AS achieved_at, s.difficulty AS best_difficulty
+        FROM scoped s
+        JOIN bests b ON b.user_id = s.user_id AND s.accuracy = b.best_accuracy
+        ORDER BY s.user_id, s.created_at ASC
       ),
       ranked AS (
-        SELECT u.id AS user_id, u.username, b.best_accuracy, b.attempts, a.achieved_at,
+        SELECT u.id AS user_id, u.username, b.best_accuracy, b.attempts,
+               a.achieved_at, a.best_difficulty,
                ROW_NUMBER() OVER (
                  ORDER BY b.best_accuracy DESC, a.achieved_at ASC, u.username ASC
                ) AS board_rank
@@ -269,13 +303,7 @@ export class ModesService {
       ORDER BY board_rank
       LIMIT $4 OFFSET $5`;
 
-    const result = await pool.query(query, [
-      filters.mode,
-      filters.difficulty,
-      search,
-      limit,
-      offset,
-    ]);
+    const result = await pool.query(query, [filters.mode, difficulty, search, limit, offset]);
 
     const entries = result.rows.map((row: any) => ({
       rank: int(row.board_rank),
@@ -284,6 +312,8 @@ export class ModesService {
       bestAccuracy: round3(row.best_accuracy),
       attempts: int(row.attempts),
       achievedAt: row.achieved_at,
+      /** The difficulty this player's best round was played at. */
+      difficulty: row.best_difficulty as Difficulty,
     }));
 
     return {

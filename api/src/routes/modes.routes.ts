@@ -4,6 +4,7 @@ import {
   DIFFICULTIES,
   EXTRA_MODES,
   ModesService,
+  isBoardDifficulty,
   isDifficulty,
   isExtraMode,
   readRoundToken,
@@ -107,14 +108,16 @@ router.post('/submit', authMiddleware, async (req: AuthRequest, res) => {
 router.get('/leaderboard', optionalAuthMiddleware, async (req, res) => {
   try {
     const mode = req.query.mode;
-    const difficulty = req.query.difficulty;
+    // Absent means `all` — the default view is every difficulty at once, with
+    // each row labelled. A present-but-invalid value is still an error.
+    const difficulty = req.query.difficulty ?? 'all';
 
     if (!isExtraMode(mode)) {
       res.status(400).json({ error: 'Invalid mode', valid: EXTRA_MODES });
       return;
     }
-    if (!isDifficulty(difficulty)) {
-      res.status(400).json({ error: 'Invalid difficulty', valid: DIFFICULTIES });
+    if (!isBoardDifficulty(difficulty)) {
+      res.status(400).json({ error: 'Invalid difficulty', valid: ['all', ...DIFFICULTIES] });
       return;
     }
 

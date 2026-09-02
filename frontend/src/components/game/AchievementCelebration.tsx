@@ -35,6 +35,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   modes: 'Difficulty',
   speed: 'Speed',
   daily: 'Daily',
+  extra: 'Inverted & Blind',
   social: 'Social',
   meta: 'Meta',
 }

@@ -89,6 +89,7 @@ const CATEGORIES: { key: string; label: string }[] = [
   { key: 'modes', label: 'Difficulty' },
   { key: 'speed', label: 'Speed' },
   { key: 'daily', label: 'Daily' },
+  { key: 'extra', label: 'Inverted & Blind' },
   { key: 'social', label: 'Social' },
   { key: 'meta', label: 'Meta' },
 ]

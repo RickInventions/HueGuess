@@ -104,6 +104,18 @@ export default function Room() {
   const isUrgent = timeLeft <= 5 && timeLeft > 0
   const timerLabel = phase === 'memorization' ? 'Memorize' : 'Reconstruct'
 
+  /**
+   * How long the colour takes to fade in and out, as a fraction of how long it is
+   * on screen at all — capped at the 0.4s that reads well on the slower
+   * difficulties.
+   *
+   * Extreme shows the colour for half a second. A fixed 0.4s fade spent almost
+   * that entire window ramping opacity up and then cut straight into the exit
+   * animation, so the colour never actually sat still: it registered as the screen
+   * flashing rather than as a colour to memorize.
+   */
+  const revealDuration = Math.min(0.4, Math.max(0.1, (currentRoom?.config.colorTimeSeconds ?? 0.4) / 4))
+
   // ── Deep link: /room/CODE with no room in state → try to join it once ──────
   useEffect(() => {
     if (currentRoom || !code || deepLinkTried.current || !canAct) return
@@ -658,7 +670,7 @@ export default function Room() {
                 // large element to its own layer mid-transition, and on phones that
                 // showed up as the whole screen flashing once at the colour reveal.
                 exit={{ opacity: 0, scale: 0.98 }}
-                transition={{ duration: 0.4 }}
+                transition={{ duration: revealDuration }}
                 className="space-y-4"
               >
                 <div

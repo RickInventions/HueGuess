@@ -38,11 +38,24 @@ export interface AchievementWithProgress extends Achievement {
 }
 
 /**
+ * Which Inverted/Blind rounds an achievement is asking about.
+ *
+ * `mode` pins one exactly; `family` covers a group, so Blind's two sub-modes can
+ * share a requirement without naming both. Omitting everything matches every
+ * round in either mode, which is how the cross-mode volume tiers are expressed.
+ */
+export interface ExtraSelector {
+  mode?: string;
+  family?: string;
+  difficulty?: string;
+}
+
+/**
  * Everything any achievement can be judged against, read once per check.
  *
  * Built from the tables that actually persist: competitive rounds, the daily
- * challenge, friendships and the account itself. Casual games are deliberately
- * absent — they are never written to the database at all.
+ * challenge, Inverted/Blind rounds, friendships and the account itself. Casual
+ * games are deliberately absent — they are never written to the database at all.
  */
 export interface AchievementStats {
   /** Competitive */
@@ -65,6 +78,10 @@ export interface AchievementStats {
   dailyBestAccuracy: number;
   /** Fastest daily submission, in ms. Infinity when they have never played one. */
   dailyFastestMs: number;
+
+  /** Inverted and Blind — off the ladder, but they have their own family. */
+  extraRoundsPlayed: (selector: ExtraSelector) => number;
+  extraBestAccuracy: (selector: ExtraSelector) => number;
 
   /** Social + account */
   friends: number;
@@ -242,6 +259,7 @@ export class AchievementService {
       account,
       unlockedCount,
       bestGain,
+      extraRounds,
     ] = await Promise.all([
       pool.query(
         `SELECT rating, current_streak, best_streak, games_played, best_score
@@ -300,6 +318,14 @@ export class AchievementService {
         `SELECT MAX(rating_change) AS best FROM rating_history WHERE user_id = $1`,
         [userId]
       ),
+      // Inverted/Blind, aggregated by (mode, difficulty). Twelve rows at most, so
+      // the selectors below filter in JS rather than needing a query per family.
+      pool.query(
+        `SELECT mode, difficulty, COUNT(*) AS rounds, MAX(accuracy) AS best
+         FROM mode_rounds WHERE user_id = $1
+         GROUP BY mode, difficulty`,
+        [userId]
+      ),
     ]);
 
     const comp = competitive.rows[0] ?? {};
@@ -328,6 +354,14 @@ export class AchievementService {
 
     const fastest = Number(dailyRow.fastest);
 
+    const extra: ExtraRoundGroup[] = extraRounds.rows.map((row: any) => ({
+      mode: String(row.mode),
+      difficulty: String(row.difficulty),
+      rounds: Number(row.rounds) || 0,
+      bestAccuracy: Number(row.best) || 0,
+    }));
+    const matching = (selector: ExtraSelector) => extra.filter(row => matchesExtra(row, selector));
+
     return {
       rating: Number(comp.rating) || 0,
       bestRatingGain: Number(bestGain.rows[0]?.best) || 0,
@@ -347,6 +381,11 @@ export class AchievementService {
       dailyStreak: consecutiveDays(dailyDates.rows.map(r => r.day)),
       dailyBestAccuracy: Number(dailyRow.best) || 0,
       dailyFastestMs: Number.isFinite(fastest) && fastest > 0 ? fastest : Infinity,
+
+      extraRoundsPlayed: selector =>
+        matching(selector).reduce((sum, row) => sum + row.rounds, 0),
+      extraBestAccuracy: selector =>
+        matching(selector).reduce((best, row) => Math.max(best, row.bestAccuracy), 0),
 
       friends: Number(friends.rows[0]?.count) || 0,
       accountAgeDays,
@@ -603,6 +642,14 @@ export function evaluate(
     case 'friends_count':
       return atLeast(stats.friends);
 
+    // Inverted / Blind. Which rounds count comes from metadata: `mode` for one
+    // exactly, `family` for Blind's two sub-modes together, `difficulty` to
+    // narrow either, nothing at all for both modes combined.
+    case 'extra_played':
+      return atLeast(stats.extraRoundsPlayed(extraSelector(achievement)));
+
+    case 'extra_accuracy':
+      return atLeast(stats.extraBestAccuracy(extraSelector(achievement)));
     case 'account_age_days':
       return atLeast(stats.accountAgeDays);
 
@@ -615,6 +662,34 @@ export function evaluate(
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+/** One `(mode, difficulty)` pair of a player's Inverted/Blind history. */
+interface ExtraRoundGroup {
+  mode: string;
+  difficulty: string;
+  rounds: number;
+  bestAccuracy: number;
+}
+
+/**
+ * A family matches its own mode name or anything prefixed with it plus an
+ * underscore, so `blind` covers `blind_target` and `blind_sliders` without
+ * also swallowing a future `blindfold` mode.
+ */
+function matchesExtra(row: ExtraRoundGroup, selector: ExtraSelector): boolean {
+  if (selector.mode && row.mode !== selector.mode) return false;
+  if (selector.difficulty && row.difficulty !== selector.difficulty) return false;
+  if (selector.family && row.mode !== selector.family && !row.mode.startsWith(`${selector.family}_`)) {
+    return false;
+  }
+  return true;
+}
+
+const extraSelector = (achievement: Achievement): ExtraSelector => ({
+  mode: achievement.requirement_metadata?.mode,
+  family: achievement.requirement_metadata?.family,
+  difficulty: achievement.requirement_metadata?.difficulty,
+});
 
 /**
  * Read a pre-aggregated bucket, tolerating a threshold the query never grouped.

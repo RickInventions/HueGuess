@@ -252,6 +252,79 @@ family('daily', 'daily_speed', [
   ['daily_fast', 'No Hesitation', '💨', 5000, 'gold', 'Finish a Daily Challenge in under 5 seconds'],
 ]);
 
+// ── Inverted (9) ───────────────────────────────────────────────────────────
+// Inverted and Blind are off the ladder — no HuePoints, no rank — so these are
+// the only thing to chase in them. Accuracy bars are set against how the mode
+// actually plays rather than copied from competitive: Inverted is normal
+// difficulty once you know the transform, Blind's grey sliders remove feedback
+// but not information, and Blind with no target hides the hue entirely, where the
+// weighting puts half the score out of reach of anything but luck.
+family('extra', 'extra_played', [
+  ['inv_1', 'First Reflection', '🪞', 1, 'bronze', 'Play your first Inverted round'],
+  ['inv_10', 'Mirror Walker', '🚶', 10, 'bronze', 'Play 10 Inverted rounds'],
+  ['inv_50', 'Through the Looking Glass', '🔮', 50, 'silver', 'Play 50 Inverted rounds'],
+], { mode: 'inverted' });
+
+family('extra', 'extra_accuracy', [
+  ['inv_acc_70', 'Un-inverted', '🔄', 70, 'bronze', 'Hit 70% accuracy in Inverted mode'],
+  ['inv_acc_85', 'Complement Reader', '📖', 85, 'silver', 'Hit 85% accuracy in Inverted mode'],
+  ['inv_acc_93', 'Antipode', '🧭', 93, 'gold', 'Hit 93% accuracy in Inverted mode'],
+  ['inv_acc_98', 'Perfect Reflection', '💠', 98, 'platinum', 'Hit 98% accuracy in Inverted mode'],
+], { mode: 'inverted' });
+
+family('extra', 'extra_accuracy', [
+  ['inv_hard_85', 'Hard Reflection', '🪨', 85, 'gold', 'Hit 85% in Inverted on Hard'],
+], { mode: 'inverted', difficulty: 'hard' });
+
+family('extra', 'extra_accuracy', [
+  ['inv_extreme_80', 'Extreme Reflection', '☄️', 80, 'platinum', 'Hit 80% in Inverted on Extreme'],
+], { mode: 'inverted', difficulty: 'extreme' });
+
+// ── Blind · no target (7) ──────────────────────────────────────────────────
+family('extra', 'extra_played', [
+  ['bt_1', 'Shot in the Dark', '🌑', 1, 'bronze', 'Play your first Blind round with no target'],
+  ['bt_25', 'Groping Around', '🕯️', 25, 'silver', 'Play 25 Blind rounds with no target'],
+], { mode: 'blind_target' });
+
+family('extra', 'extra_accuracy', [
+  ['bt_acc_70', 'Lucky Guess', '🍀', 70, 'bronze', 'Hit 70% in Blind with no target shown'],
+  ['bt_acc_85', 'Sixth Sense', '🔮', 85, 'silver', 'Hit 85% in Blind with no target shown'],
+  ['bt_acc_93', 'Uncanny', '😶‍🌫️', 93, 'gold', 'Hit 93% in Blind with no target shown'],
+  ['bt_acc_98', 'One in a Hundred', '🎰', 98, 'platinum', 'Hit 98% in Blind with no target shown'],
+], { mode: 'blind_target' });
+
+family('extra', 'extra_accuracy', [
+  ['bt_extreme_85', 'Blind Extremist', '💀', 85, 'gold', 'Hit 85% in Blind with no target, on Extreme'],
+], { mode: 'blind_target', difficulty: 'extreme' });
+
+// ── Blind · grey sliders (7) ───────────────────────────────────────────────
+family('extra', 'extra_played', [
+  ['bs_1', 'Feeling for It', '🤲', 1, 'bronze', 'Play your first Blind round with grey sliders'],
+  ['bs_25', 'Muscle Memory', '💪', 25, 'silver', 'Play 25 Blind rounds with grey sliders'],
+], { mode: 'blind_sliders' });
+
+family('extra', 'extra_accuracy', [
+  ['bs_acc_75', 'By Feel', '🖐️', 75, 'bronze', 'Hit 75% in Blind with grey sliders'],
+  ['bs_acc_88', 'Dead Reckoning', '🧮', 88, 'silver', 'Hit 88% in Blind with grey sliders'],
+  ['bs_acc_95', 'Instrument Flying', '✈️', 95, 'gold', 'Hit 95% in Blind with grey sliders'],
+  ['bs_acc_99', 'No Feedback Needed', '🎛️', 99, 'platinum', 'Hit 99% in Blind with grey sliders'],
+], { mode: 'blind_sliders' });
+
+family('extra', 'extra_accuracy', [
+  ['bs_extreme_85', 'Grey Extremist', '⚫', 85, 'gold', 'Hit 85% in Blind with grey sliders, on Extreme'],
+], { mode: 'blind_sliders', difficulty: 'extreme' });
+
+// ── Across both Blind sub-modes, and across both modes (3) ─────────────────
+family('extra', 'extra_played', [
+  ['blind_50', 'Eyes Closed', '🙈', 50, 'silver', 'Play 50 Blind rounds, either sub-mode'],
+], { family: 'blind' });
+
+// No metadata: every Inverted and Blind round counts.
+family('extra', 'extra_played', [
+  ['extra_25', 'Off the Ladder', '🪜', 25, 'bronze', 'Play 25 rounds across Inverted and Blind'],
+  ['extra_150', 'Sideways Specialist', '🧩', 150, 'gold', 'Play 150 rounds across Inverted and Blind'],
+]);
+
 // ── Social (4) ─────────────────────────────────────────────────────────────
 family('social', 'friends_count', [
   ['friends_1', 'Not Alone', '🤝', 1, 'bronze', 'Add your first friend'],

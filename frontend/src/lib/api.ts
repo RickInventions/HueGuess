@@ -6,6 +6,7 @@ import type {
   FriendSearchResult,
 } from '../types/friends';
 import type {
+  BoardDifficulty,
   ExtraBoard,
   ExtraMode,
   ExtraRoundResponse,
@@ -129,7 +130,7 @@ export const modes = {
     }),
   getLeaderboard: (params: {
     mode: ExtraMode;
-    difficulty: Difficulty;
+    difficulty: BoardDifficulty;
     search?: string;
     limit?: number;
     offset?: number;
