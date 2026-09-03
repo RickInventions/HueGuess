@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Copy, Check, AlertTriangle, Share2 } from 'lucide-react'
@@ -63,6 +63,9 @@ export default function Challenge() {
 
   const canAct = isConnected && isOnline
 
+  /** Room code we have already handed to the game screen this stretch of play. */
+  const handedOffRef = useRef<string | null>(null)
+
   // Keep the view in step with whether we actually hold a room.
   useEffect(() => {
     if (currentRoom) setView('waiting')
@@ -81,11 +84,23 @@ export default function Challenge() {
   }, [mpError])
 
   // Hand off to the game screen once a round is live.
+  //
+  // Once per stretch of live play, and never twice in a row. Two screens each
+  // convinced the other one owns the player is what the rapid blinking was: the
+  // room screen bounced back here, this pushed straight back there, and the pair
+  // traded the route several times a second until the page was reloaded. The
+  // room screen no longer bounces, and this is the other half of the circuit
+  // breaker — worst case a player waits here until the next round opens.
   useEffect(() => {
     if (!currentRoom) return
-    if (['memorization', 'reconstruction', 'results', 'ended'].includes(phase)) {
-      navigate(`/room/${currentRoom.code}`, { replace: true })
+    if (phase === 'waiting') {
+      handedOffRef.current = null
+      return
     }
+    if (!['memorization', 'reconstruction', 'results', 'ended'].includes(phase)) return
+    if (handedOffRef.current === currentRoom.code) return
+    handedOffRef.current = currentRoom.code
+    navigate(`/room/${currentRoom.code}`, { replace: true })
   }, [phase, currentRoom, navigate])
 
   // The 3-2-1 before the first round happens here, in the lobby.

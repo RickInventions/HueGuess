@@ -21,6 +21,23 @@ import type { HSLColor } from '../types'
 /** Floor for the auto-submit fallback — no real round is shorter than this. */
 const MIN_ROUND_MS = 3_000
 
+/**
+ * The page's own colours, inverted by hand, for the memorization overlay in an
+ * Inverted room.
+ *
+ * Hardcoded rather than `filter: invert(1)` on a wrapper, for the same reason as
+ * the single-player version: a filter also inverts the swatch it is meant to
+ * leave alone, drags every shadow with it, and behaves differently again once a
+ * portal (toasts, the chat panel) renders outside the filtered subtree.
+ */
+const INVERTED = {
+  base: '#000207',
+  surfaceAlt: '#080B12',
+  deep: '#E2E2E0',
+  muted: '#91918C',
+  primary: '#A19F00',
+} as const
+
 export default function Room() {
   const navigate = useNavigate()
   const { code } = useParams<{ code: string }>()
@@ -76,8 +93,30 @@ export default function Room() {
   const autoSubmittedRef = useRef<number | null>(null)
   const enteredReconstructionRef = useRef<number | null>(null)
   const deepLinkTried = useRef(false)
+  /** A deep-link join is still in flight — "no room yet" isn't "no room". */
+  const joiningRef = useRef(false)
+  /** Have we ever actually held this room? Only then is losing it an exit. */
+  const hadRoomRef = useRef(false)
+  /** One programmatic exit per mount, whichever reason gets there first. */
+  const exitedRef = useRef(false)
   /** Has the player moved a slider this round? Guards the shuffled-start adoption. */
   const touchedRef = useRef(false)
+
+  /**
+   * Leave for the lobby, at most once.
+   *
+   * Every route change out of here goes through this. A second one can only ever
+   * be a screen arguing with the lobby about who owns the player, and that
+   * argument is what the blinking was.
+   */
+  const exitToLobby = useCallback(
+    (state?: { message: string }) => {
+      if (exitedRef.current) return
+      exitedRef.current = true
+      navigate('/challenge', { replace: true, state })
+    },
+    [navigate]
+  )
 
   const canAct = isConnected && isOnline
 
@@ -128,25 +167,43 @@ export default function Room() {
   useEffect(() => {
     if (currentRoom || !code || deepLinkTried.current || !canAct) return
     deepLinkTried.current = true
-    joinRoom(code).catch(() => {
-      navigate('/challenge', { replace: true, state: { message: 'That room is no longer available' } })
-    })
-  }, [currentRoom, code, canAct, joinRoom, navigate])
+    joiningRef.current = true
+    joinRoom(code)
+      .catch(() => {
+        exitToLobby({ message: 'That room is no longer available' })
+      })
+      .finally(() => {
+        joiningRef.current = false
+      })
+  }, [currentRoom, code, canAct, joinRoom, exitToLobby])
 
   // Host ended the session → everyone goes back to the lobby view. Gated on the
   // phase as well as the flag: the lobby sends you straight back here the moment
   // a round is live, so acting on a stale "session ended" would ping-pong
   // between the two screens rather than leave one of them.
   useEffect(() => {
-    if (sessionEnded && phase === 'waiting') navigate('/challenge', { replace: true })
-  }, [sessionEnded, phase, navigate])
+    if (sessionEnded && phase === 'waiting') exitToLobby()
+  }, [sessionEnded, phase, exitToLobby])
 
-  // Left the room entirely (kicked, dissolved) → leave the screen.
+  /**
+   * Left the room entirely (kicked, dissolved) → leave the screen.
+   *
+   * Only once a room has actually been held. The old test — "no room, and a join
+   * was attempted" — was true in the very commit that started the join, because
+   * the attempt is marked before it resolves and effects run in order. Every
+   * invite link therefore bounced to the lobby on arrival, and with the lobby
+   * pushing back the moment a round was live the two screens traded the route
+   * between them, several times a second, which is what read as the whole site
+   * blinking.
+   */
   useEffect(() => {
-    if (!currentRoom && deepLinkTried.current) {
-      navigate('/challenge', { replace: true })
+    if (currentRoom) {
+      hadRoomRef.current = true
+      return
     }
-  }, [currentRoom, navigate])
+    if (joiningRef.current || !hadRoomRef.current) return
+    exitToLobby()
+  }, [currentRoom, exitToLobby])
 
   // ── Sounds ────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -277,7 +334,7 @@ export default function Room() {
 
   const handleLeaveRoom = () => {
     leaveRoom()
-    navigate('/challenge', { replace: true })
+    exitToLobby()
   }
 
   // Shared by the lobby and the results screen so both toggles sound the same.
@@ -356,7 +413,7 @@ export default function Room() {
         {banner}
         <Loader2 className="w-8 h-8 mx-auto text-primary animate-spin" />
         <p className="text-sm text-muted">Joining room {code}…</p>
-        <Button variant="ghost" onClick={() => navigate('/challenge', { replace: true })}>
+        <Button variant="ghost" onClick={() => exitToLobby()}>
           Back to lobby
         </Button>
       </div>
@@ -649,6 +706,12 @@ export default function Room() {
 
   // ── ACTIVE ROUND ──────────────────────────────────────────────────────────
   const showColor = phase === 'memorization' && currentColor
+  // An Inverted room inverts the whole screen while the colour is up, not just
+  // the swatch — same as the single-player mode, and the reason the mode is
+  // hard: you have to undo the page as well as the colour.
+  const showInvertedReveal = !!showColor && isInverted
+  const revealProgress =
+    totalTime > 0 ? Math.max(0, Math.min(1, (timeRemaining ?? 0) / totalTime)) : 0
 
   return (
     <div className="max-w-game lg:max-w-5xl mx-auto px-4 py-6 space-y-5">
@@ -676,7 +739,7 @@ export default function Room() {
           )}
 
           <AnimatePresence mode="wait">
-            {showColor && currentColor && (
+            {showColor && currentColor && !isInverted && (
               <motion.div
                 key="memorize"
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -784,6 +847,64 @@ export default function Room() {
           />
         </div>
       </div>
+
+      {/* Covers the room entirely, chat and player list included — an inverted
+          page you can still see the normal one behind is just a dark card. */}
+      <AnimatePresence>
+        {showInvertedReveal && currentColor && (
+          <motion.div
+            key="inverted-reveal"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: revealDuration }}
+            className="fixed inset-0 z-[60] flex flex-col items-center justify-center px-4"
+            style={{ backgroundColor: INVERTED.base }}
+          >
+            <div className="w-full max-w-[300px] space-y-4">
+              <p
+                className="text-center text-[11px] font-semibold uppercase tracking-[0.2em]"
+                style={{ color: INVERTED.primary }}
+              >
+                Inverted · Round {currentRound}
+                {totalRounds ? ` of ${totalRounds}` : ''}
+              </p>
+
+              <div
+                className="aspect-square w-full rounded-2xl"
+                style={{
+                  backgroundColor: `hsl(${currentColor.h}, ${currentColor.s}%, ${currentColor.l}%)`,
+                  boxShadow: '0 0 0 1px rgba(255,255,255,0.14)',
+                }}
+              />
+
+              {/* Its own bar: TimerBar is painted in the light theme's tokens and
+                  would be the one bright thing on an inverted screen. */}
+              <div
+                className="h-1.5 w-full overflow-hidden rounded-full"
+                style={{ backgroundColor: INVERTED.surfaceAlt }}
+              >
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${revealProgress * 100}%`,
+                    backgroundColor: INVERTED.primary,
+                    transition: 'width 120ms linear',
+                  }}
+                />
+              </div>
+
+              <p className="text-center text-sm font-medium" style={{ color: INVERTED.deep }}>
+                Memorize the flipped colour
+              </p>
+              <p className="text-center text-xs" style={{ color: INVERTED.muted }}>
+                You're being shown the complement — invert it back yourself, then match the
+                original.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

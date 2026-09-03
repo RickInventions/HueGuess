@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { soundService } from './services/soundService';
+import { useLatestBuild } from './hooks/useLatestBuild';
 import { useEffect } from 'react';
 import {Navbar} from './components/layout/Navbar';
 import Home from './pages/Home';
@@ -23,6 +24,10 @@ import ResetPassword from './pages/ResetPassword';
 
 function App() {
   const { isAuthenticated, isLoading, isVerified } = useAuth();
+
+  // Pick up a deploy without waiting for the tab to be closed — a room only
+  // works when everyone in it is running the same client.
+  useLatestBuild();
 
   // Initialize sound on first user interaction
   useEffect(() => {

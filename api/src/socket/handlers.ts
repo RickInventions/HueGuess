@@ -323,6 +323,21 @@ function beginRound(io: Server, roomCode: string, kind: 'new' | 'next'): void {
   // Already reconstructing: there is no reveal to end, so the round's own clock
   // is the next thing to schedule.
   if (room.phase === 'reconstruction') {
+    // Say it twice. `round_started` carries the phase, but a client running an
+    // older bundle ignores that field and assumes every round opens on
+    // memorization — and since a no-target round never reaches
+    // `beginReconstruction`, the transition it is waiting for would never come.
+    // It sat on an empty memorization screen for the whole round with no sliders
+    // and no preview. Harmless to a current client: same phase, same deadline,
+    // same start colour.
+    io.to(roomCode).emit('reconstruction_started', {
+      round: room.currentRound,
+      roundDuration: room.config.roundTimeSeconds,
+      startColor: room.startColor ?? null,
+      phaseEndsAt: room.phaseEndsAt,
+      serverTime: Date.now(),
+    });
+
     clearTimer(roomCode, 'reconstruction');
     getTimers(roomCode).reconstruction = setTimeout(
       () => endRound(io, roomCode),
