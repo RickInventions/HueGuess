@@ -35,6 +35,9 @@ const AUTH_ERRORS: Record<string, string> = {
   AUTH_REQUIRED: 'Please sign in again to play online.',
   AUTH_INVALID: 'Your session is no longer valid. Please sign in again.',
   AUTH_EXPIRED: 'Your session expired. Please sign in again.',
+  // Refused at the handshake by the moderation check, so the reason is on the
+  // sign-in screen rather than here.
+  ACCOUNT_BANNED: 'This account cannot play online. Please sign in again for details.',
   SERVER_MISCONFIGURED: 'The server is unavailable right now. Try again later.',
 };
 
@@ -171,6 +174,14 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    // Sent just before the server closes the socket of an account an admin has
+    // restricted. The stored token stays valid for its full seven days, so the
+    // client has to drop it here instead of waiting for the next boot to be told.
+    // Reuses the logout event AuthContext already listens for.
+    const onAccountRestricted = () => {
+      window.dispatchEvent(new Event('auth:logout'));
+    };
+
     // Re-sync periodically: a laptop waking from sleep can have a local clock
     // that jumped, and a long game would otherwise run on a stale offset.
     const resync = window.setInterval(() => {
@@ -188,6 +199,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
     s.io.on('reconnect_attempt', onReconnectAttempt);
     s.io.on('reconnect_failed', onReconnectFailed);
     s.on('connection_ready', onConnectionReady);
+    s.on('account_restricted', onAccountRestricted);
 
     setSocket(s);
     if (!s.connected) s.connect();
@@ -203,6 +215,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       s.io.off('reconnect_attempt', onReconnectAttempt);
       s.io.off('reconnect_failed', onReconnectFailed);
       s.off('connection_ready', onConnectionReady);
+      s.off('account_restricted', onAccountRestricted);
     };
   }, [isAuthenticated, token, probeClock]);
 

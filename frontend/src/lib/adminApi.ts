@@ -36,7 +36,7 @@ export const adminApi = {
     });
     return response.data;
   },
-  getUsers: async (params: { search?: string; limit?: number; offset?: number }) => {
+  getUsers: async (params: { search?: string; status?: string; limit?: number; offset?: number }) => {
     const response = await adminAxios.get(`${API_URL}/admin/users`, {
       params,
       headers: { 'X-Admin-Key': getAdminKey() }
@@ -49,6 +49,53 @@ export const adminApi = {
     });
     return response.data;
   },
+
+  // ── Moderation ────────────────────────────────────────────────────────────
+
+  /** `durationHours: null` is a permanent ban; a number is a suspension. */
+  restrictUser: async (userId: string, reason: string, durationHours: number | null) => {
+    const response = await adminAxios.post(
+      `${API_URL}/admin/users/${userId}/restrict`,
+      { reason, durationHours },
+      { headers: { 'X-Admin-Key': getAdminKey() } }
+    );
+    return response.data;
+  },
+  unrestrictUser: async (userId: string) => {
+    const response = await adminAxios.post(`${API_URL}/admin/users/${userId}/unrestrict`, {}, {
+      headers: { 'X-Admin-Key': getAdminKey() }
+    });
+    return response.data;
+  },
+  getModerationList: async (params: { status?: string; limit?: number; offset?: number }) => {
+    const response = await adminAxios.get(`${API_URL}/admin/moderation`, {
+      params,
+      headers: { 'X-Admin-Key': getAdminKey() }
+    });
+    return response.data;
+  },
+  setVerification: async (userId: string, verified: boolean) => {
+    const response = await adminAxios.post(
+      `${API_URL}/admin/users/${userId}/verification`,
+      { verified },
+      { headers: { 'X-Admin-Key': getAdminKey() } }
+    );
+    return response.data;
+  },
+  deleteUser: async (userId: string) => {
+    const response = await adminAxios.delete(`${API_URL}/admin/users/${userId}`, {
+      headers: { 'X-Admin-Key': getAdminKey() }
+    });
+    return response.data;
+  },
+  getLogs: async (params: { action?: string; limit?: number; offset?: number }) => {
+    const response = await adminAxios.get(`${API_URL}/admin/logs`, {
+      params,
+      headers: { 'X-Admin-Key': getAdminKey() }
+    });
+    return response.data;
+  },
+
   getFeedback: async (params: { resolved?: boolean; type?: string; limit?: number; offset?: number }) => {
     const response = await adminAxios.get(`${API_URL}/admin/feedback`, {
       params,

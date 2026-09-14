@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { Button } from '../components/ui/Button'
 import { toast } from 'sonner'
 import axios from 'axios'
+import { format } from 'date-fns'
 
 export default function Login() {
   const { login } = useAuth()
@@ -47,8 +48,15 @@ export default function Login() {
           return
         }
 
-        // Server responded with error
-        if (err.response?.data?.error) {
+        // A restricted account is not a credentials problem either, and for a
+        // suspension the date it lifts is the only thing the person wants to know.
+        if (err.response?.data?.code === 'ACCOUNT_BANNED') {
+          const ban = err.response.data.ban
+          const until = ban?.until
+            ? ` It lifts on ${format(new Date(ban.until), 'd MMM yyyy, HH:mm')}.`
+            : ''
+          message = `${err.response.data.error}${until}`
+        } else if (err.response?.data?.error) {
           message = err.response.data.error
         } else if (err.response?.data?.message) {
           message = err.response.data.message

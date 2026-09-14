@@ -156,6 +156,43 @@ const ACHIEVEMENT_COLUMNS = `
 `;
 
 /**
+ * Moderation state for an account.
+ *
+ * There is deliberately no `is_banned` boolean. `banned_at` is the flag and
+ * `banned_until` the term, so an expired suspension lapses on its own — nothing
+ * has to remember to clear a flag, and the two can never disagree about whether
+ * the account is currently restricted. `banned_until IS NULL` alongside a set
+ * `banned_at` means permanent.
+ */
+const MODERATION_COLUMNS = `
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_reason   TEXT;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at    TIMESTAMPTZ;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_until TIMESTAMPTZ;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_by    TEXT;
+
+  CREATE INDEX IF NOT EXISTS users_banned_at_idx ON users (banned_at);
+`;
+
+/**
+ * The audit trail behind every admin write.
+ *
+ * Created here as well as used: the table predates this file and may exist with
+ * a different shape, in which case IF NOT EXISTS leaves it alone and only the
+ * insert path matters.
+ */
+const ADMIN_LOGS_TABLE = `
+  CREATE TABLE IF NOT EXISTS admin_logs (
+    id         BIGSERIAL PRIMARY KEY,
+    admin_id   TEXT,
+    action     TEXT NOT NULL,
+    details    JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+
+  CREATE INDEX IF NOT EXISTS admin_logs_created_idx ON admin_logs (created_at DESC);
+`;
+
+/**
  * Runs the bootstrap. Never throws: a database that is briefly unreachable at
  * boot should not stop the server from coming up and serving what it can.
  */
@@ -172,6 +209,20 @@ export async function bootstrapSchema(): Promise<void> {
     console.log('✅ Achievement schema ready');
   } catch (error) {
     console.error('❌ Achievement schema failed:', (error as Error).message);
+  }
+
+  try {
+    await pool.query(MODERATION_COLUMNS);
+    console.log('✅ Moderation schema ready');
+  } catch (error) {
+    console.error('❌ Moderation schema failed:', (error as Error).message);
+  }
+
+  try {
+    await pool.query(ADMIN_LOGS_TABLE);
+    console.log('✅ Admin log schema ready');
+  } catch (error) {
+    console.error('❌ Admin log schema failed:', (error as Error).message);
   }
 
   // Its own block, and its own userIdType() read, so a failure here cannot take

@@ -668,8 +668,11 @@ export default function Profile() {
               </div>
 
               {/* With a hundred achievements the full grid would be most of the
-                  page, so it stops at a screenful and points at the real list. */}
-              {hiddenCount > 0 && (
+                  page, so it stops at a screenful and points at the real list.
+                  Own profile only: /achievements is the viewer's own page, so on
+                  somebody else's profile this led to a grid of your unlocks
+                  under their name. */}
+              {isOwnProfile && hiddenCount > 0 && (
                 <Link
                   to="/achievements"
                   className="mt-3 inline-block text-xs font-medium text-primary hover:underline"

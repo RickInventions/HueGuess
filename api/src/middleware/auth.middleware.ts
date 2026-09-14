@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { JwtPayload } from '../types/index.js';
-import { AuthService } from '../services/auth.service.js';
+import { AuthService, describeBan } from '../services/auth.service.js';
 
 const JWT_SECRET = process.env.JWT_SECRET!;
 
@@ -61,6 +61,10 @@ export const optionalAuthMiddleware = (
  * The claim is fixed at login and cannot know about a verification that happened
  * afterwards, which is how freshly-verified users ended up being told to verify
  * an address the database had already confirmed.
+ *
+ * The same lookup also carries the ban check, so restricting an account closes
+ * every play route at no extra cost — a token minted before the ban is otherwise
+ * good for seven days.
  */
 export const requireVerified = async (
   req: AuthRequest,
@@ -74,10 +78,18 @@ export const requireVerified = async (
   }
 
   try {
-    if (!(await AuthService.isVerified(String(userId)))) {
+    const { isVerified, ban } = await AuthService.getAccountState(String(userId));
+
+    if (ban) {
+      res.status(403).json({ error: describeBan(ban), code: 'ACCOUNT_BANNED', ban });
+      return;
+    }
+
+    if (!isVerified) {
       res.status(403).json({ error: 'Email verification required', code: 'EMAIL_NOT_VERIFIED' });
       return;
     }
+
     next();
   } catch (error) {
     console.error('requireVerified error:', error);

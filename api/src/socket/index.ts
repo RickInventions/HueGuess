@@ -77,11 +77,16 @@ export function initializeSocketIO(server: HttpServer) {
       // Verification status comes from the database, not the token. The token's
       // claim is frozen at login and would keep reporting `false` for the whole
       // seven days after somebody verified — which is what made competitive mode
-      // reject accounts the database had already confirmed.
+      // reject accounts the database had already confirmed. The same read carries
+      // the ban check, so a restricted account cannot open a socket at all.
+      const userId = String(payload.userId);
+      const state = await AuthService.getAccountState(userId);
+      if (state.ban) return next(new Error('ACCOUNT_BANNED'));
+
       const user: SocketUser = {
-        userId: String(payload.userId),
+        userId,
         username: payload.username ?? 'Player',
-        isVerified: await AuthService.isVerified(String(payload.userId)),
+        isVerified: state.isVerified,
       };
       socket.data.user = user;
       return next();

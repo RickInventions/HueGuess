@@ -17,6 +17,41 @@ const JWT_EXPIRES_IN = '7d';
  */
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
+/** How an account is currently restricted, if at all. */
+export interface AccountBan {
+  reason: string | null;
+  /** ISO timestamp the suspension lapses at; null when the ban is permanent. */
+  until: string | null;
+  permanent: boolean;
+}
+
+/**
+ * Read the moderation columns into the shape callers need.
+ *
+ * An expired suspension is not a ban. That is the entire reason the term is a
+ * timestamp rather than a flag: it lapses by itself, with no cron and nobody
+ * having to remember to lift it.
+ */
+function readBan(row: {
+  ban_reason: string | null;
+  banned_at: string | null;
+  banned_until: string | null;
+}): AccountBan | null {
+  if (!row?.banned_at) return null;
+  if (row.banned_until && new Date(row.banned_until).getTime() <= Date.now()) return null;
+  return {
+    reason: row.ban_reason ?? null,
+    until: row.banned_until ?? null,
+    permanent: !row.banned_until,
+  };
+}
+
+/** The sentence shown to the account holder. No date — the client renders that. */
+export function describeBan(ban: AccountBan): string {
+  const what = ban.permanent ? 'This account has been banned' : 'This account is suspended';
+  return ban.reason ? `${what}: ${ban.reason}` : `${what}.`;
+}
+
 export class AuthService {
   static async register({ username, email, password }: RegisterInput) {
     const normalizedEmail = normalizeEmail(email);
@@ -74,7 +109,7 @@ export class AuthService {
 
   static async login({ email, password }: LoginInput) {
     const result = await pool.query(
-      `SELECT id, username, email, password_hash, is_verified
+      `SELECT id, username, email, password_hash, is_verified, ban_reason, banned_at, banned_until
        FROM users WHERE LOWER(email) = $1`,
       [normalizeEmail(email)]
     );
@@ -91,6 +126,10 @@ export class AuthService {
     if (!isValidPassword) {
       throw new Error('Invalid email or password');
     }
+
+    // After the password check, never before: answering "you are banned" to
+    // someone who cannot log in anyway would confirm the address is registered.
+    this.throwIfBanned(readBan(user));
 
     // Refuse the token rather than issuing one that says isVerified: false — a
     // seven-day token minted here used to outlive the verification itself, and
@@ -136,6 +175,41 @@ export class AuthService {
   static async isVerified(userId: string): Promise<boolean> {
     const result = await pool.query('SELECT is_verified FROM users WHERE id = $1', [userId]);
     return result.rows[0]?.is_verified === true;
+  }
+
+  /**
+   * Verification and moderation state in one lookup.
+   *
+   * Both gates want to run on every protected request, and the two facts live on
+   * the same row — reading them together keeps that at a single round trip
+   * instead of one per check.
+   */
+  static async getAccountState(
+    userId: string
+  ): Promise<{ isVerified: boolean; ban: AccountBan | null }> {
+    const result = await pool.query(
+      'SELECT is_verified, ban_reason, banned_at, banned_until FROM users WHERE id = $1',
+      [userId]
+    );
+
+    const row = result.rows[0];
+    // A missing row is a deleted account; its token must not keep working.
+    if (!row) return { isVerified: false, ban: null };
+
+    return { isVerified: row.is_verified === true, ban: readBan(row) };
+  }
+
+  /** Throws the tagged error every entry point turns into a 403. */
+  private static throwIfBanned(ban: AccountBan | null): void {
+    if (!ban) return;
+
+    const error = new Error(describeBan(ban)) as Error & {
+      code?: string;
+      ban?: AccountBan;
+    };
+    error.code = 'ACCOUNT_BANNED';
+    error.ban = ban;
+    throw error;
   }
 
   /** Log the user in off the back of a successful verification. */
@@ -414,7 +488,8 @@ export class AuthService {
 
   static async getMe(userId: string) {
     const result = await pool.query(
-      `SELECT id, username, email, is_verified, created_at, last_username_change
+      `SELECT id, username, email, is_verified, created_at, last_username_change,
+              ban_reason, banned_at, banned_until
        FROM users WHERE id = $1`,
       [userId]
     );
@@ -423,7 +498,21 @@ export class AuthService {
       throw new Error('User not found');
     }
 
-    return result.rows[0];
+    // The seven-day token outlives a ban by design, and this is the call the app
+    // makes on every boot — so this is what actually ends a restricted session.
+    const row = result.rows[0];
+    this.throwIfBanned(readBan(row));
+
+    // Spelled out rather than spread: the moderation columns are read above and
+    // must not reach the client.
+    return {
+      id: row.id,
+      username: row.username,
+      email: row.email,
+      is_verified: row.is_verified,
+      created_at: row.created_at,
+      last_username_change: row.last_username_change,
+    };
   }
 
   // Clean up expired unverified users (call this periodically)

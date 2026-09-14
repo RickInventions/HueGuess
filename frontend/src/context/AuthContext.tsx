@@ -40,9 +40,14 @@ const validateStoredAuth = async () => {
       setToken(storedToken);
       localStorage.setItem('user', JSON.stringify(validatedUser));
     } catch (error) {
-      // Only clear if it's an auth error (401), not network errors
-      if ((error as any).response?.status === 401) {
-        console.log('Token invalid, clearing storage');
+      // Only clear if it's an auth error, not a network error. A restricted
+      // account counts: the token itself stays valid for its full seven days, so
+      // this call is the only thing that ends a session after a ban.
+      const status = (error as any).response?.status;
+      const code = (error as any).response?.data?.code;
+
+      if (status === 401 || code === 'ACCOUNT_BANNED') {
+        console.log('Session no longer valid, clearing storage');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setUser(null);

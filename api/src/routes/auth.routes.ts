@@ -47,11 +47,17 @@ router.post('/login', authRateLimiter, async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Login error:', error);
-    const err = error as Error & { code?: string; email?: string };
+    const err = error as Error & { code?: string; email?: string; ban?: unknown };
     // Unverified is not a credentials failure — tag it so the client can send the
     // user to code entry instead of leaving them on a dead login screen.
     if (err.code === 'EMAIL_NOT_VERIFIED') {
       res.status(403).json({ error: err.message, code: err.code, email: err.email });
+      return;
+    }
+    // Restricted is not a credentials failure either. The ban rides along so the
+    // screen can say until when, rather than only what the message text says.
+    if (err.code === 'ACCOUNT_BANNED') {
+      res.status(403).json({ error: err.message, code: err.code, ban: err.ban });
       return;
     }
     res.status(401).json({ error: err.message });
@@ -163,7 +169,14 @@ router.get('/me', authMiddleware, async (req: AuthRequest, res) => {
     res.json({ user });
   } catch (error) {
     console.error('Get me error:', error);
-    res.status(404).json({ error: (error as Error).message });
+    const err = error as Error & { code?: string; ban?: unknown };
+    // A restricted account must lose its session here — the token itself stays
+    // valid for its full seven days, so this call is what ends it.
+    if (err.code === 'ACCOUNT_BANNED') {
+      res.status(403).json({ error: err.message, code: err.code, ban: err.ban });
+      return;
+    }
+    res.status(404).json({ error: err.message });
   }
 });
 

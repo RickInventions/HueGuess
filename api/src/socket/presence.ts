@@ -78,3 +78,27 @@ export function notifyUser(userId: string, event: string, payload: unknown): boo
   io.to(userRoom(userId)).emit(event, payload);
   return true;
 }
+
+/**
+ * Close every socket a user has open, and tell them why.
+ *
+ * Sockets take their identity once, at the handshake, and never re-check it — so
+ * banning somebody mid-session would otherwise leave them sitting in their room
+ * until they closed the tab themselves. Returns how many were closed.
+ */
+export function disconnectUser(userId: string): number {
+  const sockets = online.get(userId);
+  if (!io || !sockets?.size) return 0;
+
+  // Copied first: the disconnect handler mutates this very Set.
+  let closed = 0;
+  for (const socketId of [...sockets]) {
+    const socket = io.sockets.sockets.get(socketId);
+    if (!socket) continue;
+    socket.emit('account_restricted');
+    socket.disconnect(true);
+    closed++;
+  }
+
+  return closed;
+}
