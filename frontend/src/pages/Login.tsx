@@ -53,7 +53,7 @@ export default function Login() {
         if (err.response?.data?.code === 'ACCOUNT_BANNED') {
           const ban = err.response.data.ban
           const until = ban?.until
-            ? ` It lifts on ${format(new Date(ban.until), 'd MMM yyyy, HH:mm')}.`
+            ? `. It lifts on ${format(new Date(ban.until), 'd MMM yyyy, HH:mm')}.`
             : ''
           message = `${err.response.data.error}${until}`
         } else if (err.response?.data?.error) {
