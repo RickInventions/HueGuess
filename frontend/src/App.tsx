@@ -3,6 +3,7 @@ import { useAuth } from './context/AuthContext';
 import { soundService } from './services/soundService';
 import { useLatestBuild } from './hooks/useLatestBuild';
 import { CommunityAnnouncement } from './components/community/CommunityInvite';
+import { InviteTray } from './components/multiplayer/InviteTray';
 import { useEffect } from 'react';
 import {Navbar} from './components/layout/Navbar';
 import Home from './pages/Home';
@@ -62,6 +63,10 @@ function App() {
       {/* Renders nothing until it is actually due, so it costs a signed-out
           visitor a mounted component and no more. */}
       <CommunityAnnouncement />
+      {/* Outside <main> so it floats over every page — an invite has to be
+          answerable from wherever it catches you. Renders nothing when there is
+          nothing to answer. */}
+      <InviteTray />
       <main>
         <Routes>
           {/* Public routes - always accessible */}

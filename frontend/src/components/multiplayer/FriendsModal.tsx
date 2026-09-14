@@ -53,7 +53,7 @@ function Row({
   rankTier: string | null
   rating: number | null
   isOnline?: boolean
-  note?: string
+  note?: React.ReactNode
   actions: React.ReactNode
 }) {
   return (
@@ -142,7 +142,7 @@ export function FriendsModal({ open, onClose, inRoom = false, initialTab = 'frie
     cancelRequest,
     removeFriend,
     inviteToRoom,
-    invitedUserIds,
+    inviteCooldowns,
   } = useFriends()
 
   const [tab, setTab] = useState<Tab>(initialTab)
@@ -235,6 +235,39 @@ export function FriendsModal({ open, onClose, inRoom = false, initialTab = 'frie
 
   const onlineFriends = useMemo(() => friends.filter(f => f.isOnline).length, [friends])
 
+  /**
+   * Online friends first.
+   *
+   * The modal exists to get someone into a room, and only an online friend can be
+   * invited — so the people you can actually act on should not be scattered below
+   * however many offline ones happen to sort above them. `sort` is stable, so the
+   * server's order is preserved inside each group and nothing else moves.
+   */
+  const sortedFriends = useMemo(
+    () => [...friends].sort((a, b) => Number(!!b.isOnline) - Number(!!a.isOnline)),
+    [friends]
+  )
+
+  /**
+   * A ticking clock for the invite countdowns.
+   *
+   * One timer for the whole list rather than one per row, and it only runs while
+   * something is actually counting down — an always-on interval would re-render
+   * the modal every second for a number that is not on screen.
+   */
+  const anyCooldown = useMemo(
+    () => Object.values(inviteCooldowns).some(until => until > Date.now()),
+    [inviteCooldowns]
+  )
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    if (!anyCooldown) return
+    setNow(Date.now())
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [anyCooldown])
+
   return (
     <>
       <Modal
@@ -290,18 +323,44 @@ export function FriendsModal({ open, onClose, inRoom = false, initialTab = 'frie
               </EmptyState>
             ) : (
               <ul className="space-y-2">
-                {friends.map(friend => {
-                  const invited = invitedUserIds.includes(friend.userId)
+                {sortedFriends.map(friend => {
+                  // Rounded up, so the last second reads "1s" rather than "0s".
+                  const secondsLeft = Math.max(
+                    0,
+                    Math.ceil(((inviteCooldowns[friend.userId] ?? 0) - now) / 1000)
+                  )
+                  const onCooldown = secondsLeft > 0
                   // Mid-game: an invite would land over their sliders, and the
                   // server rejects it, so the button is off rather than lying.
                   const busy = friend.activity === 'in_game'
+
+                  // Both read the same order as the button's own disable logic,
+                  // so the note always names the first reason it is unavailable.
+                  // The countdown is held back while they are offline or mid-game:
+                  // telling someone to wait 40 s for a friend they cannot invite
+                  // anyway would be a lie.
                   const note = !friend.isOnline
                     ? 'Offline'
                     : busy
                       ? 'In a game'
-                      : friend.activity === 'in_room'
-                        ? 'In a room'
-                        : undefined
+                      : onCooldown
+                        ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            Invite again in {secondsLeft}s
+                          </span>
+                        )
+                        : friend.activity === 'in_room'
+                          ? 'In a room'
+                          : undefined
+
+                  const blocked = !friend.isOnline
+                    ? `${friend.username} is offline`
+                    : busy
+                      ? `${friend.username} is in the middle of a game`
+                      : onCooldown
+                        ? `Invite sent — you can invite ${friend.username} again in ${secondsLeft}s`
+                        : null
                   return (
                     <Row
                       key={friend.userId}
@@ -314,20 +373,12 @@ export function FriendsModal({ open, onClose, inRoom = false, initialTab = 'frie
                         <>
                           {inRoom && (
                             <IconAction
-                              label={
-                                invited
-                                  ? 'Invite sent — you can send another shortly'
-                                  : !friend.isOnline
-                                    ? `${friend.username} is offline`
-                                    : busy
-                                      ? `${friend.username} is in the middle of a game`
-                                      : `Invite ${friend.username} to this room`
-                              }
-                              tone={invited ? 'success' : 'primary'}
-                              disabled={!friend.isOnline || busy || invited}
+                              label={blocked ?? `Invite ${friend.username} to this room`}
+                              tone={onCooldown ? 'success' : 'primary'}
+                              disabled={!!blocked}
                               onClick={() => inviteToRoom(friend.userId)}
                             >
-                              {invited ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+                              {onCooldown ? <Check className="h-4 w-4" /> : <Send className="h-4 w-4" />}
                             </IconAction>
                           )}
                           <IconAction

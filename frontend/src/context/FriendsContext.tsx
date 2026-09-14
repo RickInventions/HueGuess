@@ -10,6 +10,7 @@ import type {
   Friend,
   FriendRelationship,
   FriendRequest,
+  PendingInvite,
   RoomInvite,
 } from '../types/friends'
 
@@ -22,6 +23,36 @@ import type {
  * Mounted inside MultiplayerProvider because accepting an invite has to go
  * through the same join path as typing a code by hand.
  */
+
+/** How long an unanswered invite stays in the list before it goes stale. */
+const INVITE_TTL_MS = 3 * 60_000
+
+/** A repeat from the same person inside this window is a double emit, not news. */
+const INVITE_REPEAT_MS = 10_000
+
+/**
+ * Fold an arriving invite into the list.
+ *
+ * Keyed by room, and newest first, so the entry at the top is always the one
+ * that just landed. Two friends inviting you to one code merge into a single
+ * entry rather than offering the same Join twice.
+ */
+function upsertInvite(
+  list: PendingInvite[],
+  invite: RoomInvite,
+  receivedAt: number
+): PendingInvite[] {
+  const existing = list.find(entry => entry.code === invite.code)
+
+  const fromUsernames = [invite.fromUsername, ...(existing?.fromUsernames ?? [])]
+    .filter((name, index, all) => all.indexOf(name) === index)
+    .slice(0, 3)
+
+  return [
+    { ...invite, receivedAt, fromUsernames },
+    ...list.filter(entry => entry.code !== invite.code),
+  ]
+}
 
 interface FriendsContextType {
   friends: Friend[]
@@ -45,6 +76,25 @@ interface FriendsContextType {
    * Entries expire on their own, so inviting twice needs no reload.
    */
   invitedUserIds: string[]
+  /**
+   * userId → epoch ms at which their Invite button comes back.
+   *
+   * The ids alone are all a disabled button needs, but the friends list shows a
+   * live countdown off these, so the expiry has to reach the UI rather than
+   * staying private to the provider.
+   */
+  inviteCooldowns: Record<string, number>
+  /**
+   * Room invites still waiting on an answer, newest first.
+   *
+   * Kept here rather than left to the toast: a toast expires, and an invite that
+   * scrolled off the screen is an invite the player never got to answer.
+   */
+  pendingInvites: PendingInvite[]
+  /** Join the room an invite points at. Takes it off the list. */
+  acceptInvite: (invite: PendingInvite) => Promise<void>
+  /** Say no to one room without answering the others. */
+  dismissInvite: (code: string) => void
 }
 
 const FriendsContext = createContext<FriendsContextType | undefined>(undefined)
@@ -75,15 +125,23 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
   const [inviteCooldowns, setInviteCooldowns] = useState<Record<string, number>>({})
   const cooldownTimers = useRef<Map<string, number>>(new Map())
 
-  /** Mark someone invited and schedule the entry's own removal. */
+  /**
+   * Room invites you have not answered yet, newest first.
+   *
+   * Held here rather than left to a notification, because a notification expires
+   * and an invite nobody saw is an invite nobody could answer. InviteTray renders
+   * straight off this.
+   */
+  const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([])  /** Mark someone invited and schedule the entry's own removal. */
   const startInviteCooldown = useCallback((userId: string, durationMs: number) => {
     const running = cooldownTimers.current.get(userId)
     if (running) window.clearTimeout(running)
 
     setInviteCooldowns(prev => ({ ...prev, [userId]: Date.now() + durationMs }))
 
-    // No ticking countdown label: that is a re-render a second for a button that
-    // simply comes back. It reads "Invite sent" until this fires.
+    // The entry removes itself when it lapses, so the map never grows a tail of
+    // long-dead keys. The friends list reads the expiry and ticks its own
+    // countdown against it — see FriendsModal.
     const timer = window.setTimeout(() => {
       cooldownTimers.current.delete(userId)
       setInviteCooldowns(prev => {
@@ -102,6 +160,10 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
       setFriends([])
       setIncoming([])
       setOutgoing([])
+      // Invites belong to the account that was signed in. The tray floats over
+      // every page, so leaving them behind would show them to whoever signs in
+      // next — on the login screen, before they have done anything.
+      setPendingInvites([])
       return
     }
 
@@ -135,9 +197,28 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [socket, refresh])
 
-  // Invites are not persisted, so this ref only guards against the same invite
-  // being announced twice within one session (a duplicate emit, a quick re-send).
-  const seenInvites = useRef<Set<string>>(new Set())
+  // Invites are not persisted, so this ref guards nothing but the alert sound: a
+  // double emit should merge into the entry already there, not chime twice. The
+  // list itself absorbs the repeat either way.
+  const announcedInvites = useRef<Map<string, number>>(new Map())
+
+  /** Say no to one room without answering the others. */
+  const dismissInvite = useCallback((code: string) => {
+    setPendingInvites(prev => prev.filter(entry => entry.code !== code))
+  }, [])
+
+  const acceptInvite = useCallback(
+    async (invite: PendingInvite) => {
+      dismissInvite(invite.code)
+      try {
+        await joinRoom(invite.code)
+        navigate(`/room/${invite.code}`)
+      } catch (error) {
+        toast.error((error as { message?: string })?.message || 'Could not join that room')
+      }
+    },
+    [dismissInvite, joinRoom, navigate]
+  )
 
   useEffect(() => {
     if (!socket) return
@@ -162,30 +243,19 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
     const onRoomInvite = (invite: RoomInvite) => {
       if (!invite?.code) return
 
-      const key = `${invite.fromUserId}:${invite.code}`
-      if (seenInvites.current.has(key)) return
-      seenInvites.current.add(key)
-      // Let the same invite land again after a while, in case they re-send.
-      window.setTimeout(() => seenInvites.current.delete(key), 60_000)
-
       // Already in that exact room — nothing to accept.
       if (currentRoom?.code === invite.code) return
 
+      const receivedAt = Date.now()
+      const lastAnnounced = announcedInvites.current.get(invite.code) ?? 0
+      announcedInvites.current.set(invite.code, receivedAt)
+
+      setPendingInvites(prev => upsertInvite(prev, invite, receivedAt))
+
+      // A double emit should refresh the entry, not sound the alert twice.
+      if (receivedAt - lastAnnounced < INVITE_REPEAT_MS) return
+
       soundService.playNotify()
-      toast(`${invite.fromUsername} invited you to a room`, {
-        description: invite.inProgress
-          ? `Room ${invite.code} · game in progress`
-          : `Room ${invite.code} · ${invite.playerCount}/${invite.maxPlayers} players · ${invite.difficulty}`,
-        duration: 15_000,
-        action: {
-          label: 'Join',
-          onClick: () => {
-            joinRoom(invite.code)
-              .then(() => navigate(`/room/${invite.code}`))
-              .catch(error => toast.error(error?.message || 'Could not join that room'))
-          },
-        },
-      })
     }
 
     const onInviteSent = (data: { userId: string; delivered: boolean; cooldownMs?: number }) => {
@@ -209,7 +279,7 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
       socket.off('room_invite', onRoomInvite)
       socket.off('invite_sent', onInviteSent)
     }
-  }, [socket, refresh, currentRoom?.code, joinRoom, navigate, startInviteCooldown])
+  }, [socket, refresh, currentRoom?.code, acceptInvite, startInviteCooldown])
 
   // Invites are scoped to a room, so leaving one drops every cooldown with it.
   useEffect(() => {
@@ -217,6 +287,29 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
     cooldownTimers.current.clear()
     setInviteCooldowns({})
   }, [currentRoom?.code])
+
+  // Joining a room satisfies an invite to it, whichever route got you there —
+  // a code typed by hand, or the Join on a toast. That entry has done its job.
+  useEffect(() => {
+    if (!currentRoom?.code) return
+    dismissInvite(currentRoom.code)
+  }, [currentRoom?.code, dismissInvite])
+
+  // An invite is only worth offering for as long as the room is worth joining.
+  // One timer rather than one per entry, and none at all when the list is empty.
+  useEffect(() => {
+    if (pendingInvites.length === 0) return
+
+    const timer = window.setInterval(() => {
+      const cutoff = Date.now() - INVITE_TTL_MS
+      setPendingInvites(prev => {
+        const kept = prev.filter(entry => entry.receivedAt > cutoff)
+        return kept.length === prev.length ? prev : kept
+      })
+    }, 30_000)
+
+    return () => window.clearInterval(timer)
+  }, [pendingInvites])
 
   // Nothing should still be ticking after the provider goes away.
   useEffect(() => {
@@ -338,6 +431,10 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
       removeFriend,
       inviteToRoom,
       invitedUserIds,
+      inviteCooldowns,
+      pendingInvites,
+      acceptInvite,
+      dismissInvite,
     }),
     [
       friends,
@@ -353,6 +450,10 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
       removeFriend,
       inviteToRoom,
       invitedUserIds,
+      inviteCooldowns,
+      pendingInvites,
+      acceptInvite,
+      dismissInvite,
     ]
   )
 

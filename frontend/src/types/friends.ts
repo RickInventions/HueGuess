@@ -61,3 +61,22 @@ export interface RoomInvite {
   inProgress: boolean
   sentAt: number
 }
+
+/**
+ * An invite still waiting on an answer.
+ *
+ * Keyed by room rather than by sender, because a room is one place to go: two
+ * friends inviting you to the same code is a single decision, so it stays a
+ * single entry that names both of them.
+ */
+export interface PendingInvite extends RoomInvite {
+  /** Everyone who invited you to this code, most recent first. */
+  fromUsernames: string[]
+  /**
+   * When this client received it.
+   *
+   * Deliberately not `sentAt`, which is the server's clock — an expiry computed
+   * against a clock that is minutes off would clear invites on arrival.
+   */
+  receivedAt: number
+}
