@@ -9,6 +9,7 @@ import type { LucideIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { leaderboard, achievements, user as userApi } from '../lib/api'
 import { Card } from '../components/ui/Card'
+import { CommunityBanner } from '../components/community/CommunityInvite'
 import { toast } from 'sonner'
 
 interface GlobalStats {
@@ -319,6 +320,12 @@ export default function Home() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-12">
+        {/* Above the modes: finding someone to play against is the thing a new
+            player most often can't do on their own. */}
+        <div className="mb-8">
+          <CommunityBanner />
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column: Game Modes */}
           <div className="lg:col-span-2 space-y-4">

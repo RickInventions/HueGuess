@@ -16,6 +16,7 @@ import {
   Room,
   SocketUser,
   GameEndReason,
+  GamePhase,
   ChatReplyTo,
 } from './types.js';
 import { Difficulty } from '../types/game.types.js';
@@ -444,6 +445,17 @@ function advanceIfAllReady(io: Server, roomCode: string): void {
   // advanceToNextRound keeps the ready flags, so the countdown starts immediately.
   startCountdown(io, roomCode, 'next');
 }
+
+/**
+ * When the host may remove a player: between rounds only.
+ *
+ * The round-results screen is the one that matters. The next round starts only
+ * once everyone has readied up, so one player falling asleep on round 17 of 30
+ * used to strand the rest with no way out but closing the room and throwing away
+ * every round played. A live round is excluded — ejecting someone mid-round would
+ * mean unwinding their submission and the elimination order.
+ */
+const KICKABLE_PHASES: GamePhase[] = ['waiting', 'results', 'ended'];
 
 const END_MESSAGES: Record<GameEndReason, string> = {
   rounds_complete: 'All rounds complete!',
@@ -996,9 +1008,8 @@ export function setupSocketHandlers(io: Server, socket: Socket) {
   });
 
   // ── Host removes a player ─────────────────────────────────────────────────
-  // Lobby and final-results only. Ejecting someone mid-round would mean unwinding
-  // their submission and the elimination order; the client hides the button there
-  // and this rejects it anyway.
+  // Between rounds only — see KICKABLE_PHASES. The client hides the button
+  // elsewhere and this rejects it anyway.
   on<{ socketId?: unknown }>('kick_player', data => {
     const targetSocketId = typeof data?.socketId === 'string' ? data.socketId : '';
     if (!targetSocketId || targetSocketId === socket.id) return;
@@ -1017,8 +1028,8 @@ export function setupSocketHandlers(io: Server, socket: Socket) {
       emitError(socket, 'Only the host can remove players', 'NOT_HOST');
       return;
     }
-    if (room.phase !== 'waiting' && room.phase !== 'ended') {
-      emitError(socket, 'You can only remove players between games', 'GAME_IN_PROGRESS');
+    if (!KICKABLE_PHASES.includes(room.phase)) {
+      emitError(socket, 'You can only remove players between rounds', 'GAME_IN_PROGRESS');
       return;
     }
 

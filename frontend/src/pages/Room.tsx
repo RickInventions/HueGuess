@@ -140,7 +140,14 @@ export default function Room() {
   const visualMode = currentRoom?.config.visualMode ?? 'normal'
   const isInverted = visualMode === 'inverted'
   const isBlindTarget = visualMode === 'blind_target'
-  /** Host controls only where the server accepts them: lobby and final results. */
+  /**
+   * Host controls only where the server accepts them: between rounds.
+   *
+   * That includes the round-results screen, which is the one that saves a game.
+   * The next round waits on everyone readying up, so a player who walks away
+   * mid-match holds the rest hostage — and closing the room to escape them throws
+   * away every round already played.
+   */
   const kickHandler = isHost ? kickPlayer : undefined
 
   const timeLeft = timeRemaining !== null ? Math.max(0, Math.ceil(timeRemaining)) : 0
@@ -663,6 +670,7 @@ export default function Room() {
                     showScores={!isDuel}
                     showPoints={isDuel}
                     allowFriendRequests
+                    onKick={kickHandler}
                   />
 
                   <p className="text-center text-xs text-muted">
@@ -672,6 +680,16 @@ export default function Room() {
                         ? `Waiting on ${waitingOn} ${waitingOn === 1 ? 'player' : 'players'} to ready up`
                         : 'Everyone is ready — starting…'}
                   </p>
+
+                  {/* The whole reason kicking is allowed here: a player who has
+                      walked away can't ready up, and the round count already
+                      played is too much to throw away over one of them. */}
+                  {isHost && waitingOn > 0 && enoughPlayers && (
+                    <p className="text-center text-xs text-muted">
+                      Someone away from their screen? Remove them from their card above and the
+                      game carries on.
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-3">
