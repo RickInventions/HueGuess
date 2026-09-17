@@ -119,6 +119,14 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
     }
   }, []);
 
+  /**
+   * The clock ran out — submit what is on the sliders.
+   *
+   * This used to send `{ h: 0, s: 0, l: 0 }`, which is black: anyone who let the
+   * round time out was scored against a colour they never chose, and in
+   * competitive mode that score counted. Timing out should score the guess the
+   * player had actually built, not a colour invented for them.
+   */
   const submitTimeout = useCallback(async () => {
     if (!currentDifficulty || !currentColor || isSubmitting) return;
     if (roundIdRef.current) return;
@@ -131,7 +139,7 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
         mode,
         currentDifficulty,
         currentColor,
-        { h: 0, s: 0, l: 0 },
+        userColor,
         memorizationSeconds
       );
 
@@ -149,7 +157,7 @@ export function useGame({ mode, onGameComplete }: UseGameOptions) {
     } finally {
       setIsSubmitting(false);
     }
-  }, [currentDifficulty, currentColor, config, mode, isSubmitting, onGameComplete]);
+  }, [currentDifficulty, currentColor, userColor, config, mode, isSubmitting, onGameComplete]);
 
   const submitGuess = useCallback(async (
     difficulty: Difficulty,

@@ -139,6 +139,26 @@ export default function Daily() {
     submitFuncRef.current = handleSubmit
   }, [handleSubmit])
 
+  // Enter/Space submits, as it does in every other mode. Registered only during
+  // reconstruction so the Space bar still scrolls the results screen.
+  //
+  // Daily reads through refs rather than depending on the sliders, so this does
+  // not need re-registering as the colour changes.
+  useEffect(() => {
+    if (phase !== 'reconstruction') return
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return
+      e.preventDefault()
+      // handleSubmit no-ops unless it is reconstruction and nothing is in flight,
+      // so the guard belongs to it rather than here.
+      void submitFuncRef.current?.()
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [phase])
+
   const startChallenge = useCallback(() => {
     const ch = challengeRef.current
     if (!ch) return
