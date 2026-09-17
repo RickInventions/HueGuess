@@ -22,6 +22,7 @@ import {
 import { Difficulty } from '../types/game.types.js';
 import { HSLColor } from '../types/game.types.js';
 import { FriendService } from '../services/friend.service.js';
+import { recordChallengePlay } from '../services/challengeStats.service.js';
 import { notifyUser } from './presence.js';
 
 // ── Timers ──────────────────────────────────────────────────────────────────
@@ -467,8 +468,18 @@ const END_MESSAGES: Record<GameEndReason, string> = {
 function finishGame(io: Server, roomCode: string, reason: GameEndReason): void {
   clearRoomTimers(roomCode);
 
+  // Read before endGame, which is what sets 'ended'. A game already over must not
+  // bank its rounds a second time, and a double count is silent and permanent.
+  const alreadyEnded = roomManager.getRoom(roomCode)?.phase === 'ended';
+
   const room = roomManager.endGame(roomCode);
   if (!room) return;
+
+  // The one place a whole game's challenge play is recorded. Fire-and-forget, so
+  // it costs this broadcast nothing — see challengeStats.service.
+  if (!alreadyEnded) {
+    recordChallengePlay(room.config.mode, [...room.players.values()], reason === 'rounds_complete');
+  }
 
   io.to(roomCode).emit('game_ended', {
     finalLeaderboard: roomManager.getRoomLeaderboard(room),
@@ -477,6 +488,33 @@ function finishGame(io: Server, roomCode: string, reason: GameEndReason): void {
     rounds: room.currentRound,
     players: players(room),
   });
+}
+
+/**
+ * Remove a player, banking whatever they played first.
+ *
+ * Every exit from a room goes through `removePlayer` — a voluntary leave, a
+ * dropped connection past its grace period, a kick — so the rounds are recorded
+ * here rather than at four call sites. Without it, anyone who walked out before
+ * the game ended would lose their rounds outright: by the time the game finishes
+ * they are no longer in `room.players` for `finishGame` to count.
+ *
+ * The room is read before the removal because `removePlayer` reports a deleted
+ * room as null, and the last player to leave still played those rounds.
+ *
+ * An ended room has already had its play banked by `finishGame`, so anyone
+ * leaving the final results screen — or a dropped player whose grace period
+ * lapses while it is up — is not counted a second time.
+ */
+function removePlayerBanking(socketId: string): ReturnType<typeof roomManager.removePlayer> {
+  const room = roomManager.getRoomBySocketId(socketId);
+  const result = roomManager.removePlayer(socketId);
+
+  if (room && result.player && room.phase !== 'ended') {
+    recordChallengePlay(room.config.mode, [result.player], false);
+  }
+
+  return result;
 }
 
 /**
@@ -553,7 +591,7 @@ function scheduleGracePeriod(io: Server, roomCode: string, userId: string): void
     const player = room ? roomManager.getPlayerByUserId(room, userId) : null;
     if (!room || !player || player.status !== 'disconnected') return;
 
-    const { newHostSocketId, roomDeleted } = roomManager.removePlayer(player.socketId);
+    const { newHostSocketId, roomDeleted } = removePlayerBanking(player.socketId);
     if (roomDeleted) {
       clearRoomTimers(roomCode);
       return;
@@ -609,7 +647,7 @@ export function setupSocketHandlers(io: Server, socket: Socket) {
     const hadCountdown = !!roomTimers.get(roomCode)?.countdown;
 
     clearGraceTimers(`${roomCode}:${user.userId}`);
-    const { newHostSocketId, roomDeleted } = roomManager.removePlayer(socket.id);
+    const { newHostSocketId, roomDeleted } = removePlayerBanking(socket.id);
     socket.leave(roomCode);
 
     if (roomDeleted) {
@@ -1045,7 +1083,7 @@ export function setupSocketHandlers(io: Server, socket: Socket) {
     // Their grace timers would otherwise fire against a player who is gone.
     clearGraceTimers(`${roomCode}:${target.userId}`);
 
-    const { newHostSocketId, roomDeleted } = roomManager.removePlayer(targetSocketId);
+    const { newHostSocketId, roomDeleted } = removePlayerBanking(targetSocketId);
     if (roomDeleted) {
       clearRoomTimers(roomCode);
       return;

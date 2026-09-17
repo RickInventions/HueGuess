@@ -61,6 +61,13 @@ export interface AdminUser {
   banned_by?: string | null;
   /** Computed by the server: restricted *right now*, expiry included. */
   is_restricted?: boolean;
+  /**
+   * Challenge games played to their last round, and the rounds the player was
+   * actually in. The only challenge data the server keeps — a spectator's rounds
+   * are not counted, so the two numbers move independently.
+   */
+  total_challenge_games?: number | null;
+  total_challenge_rounds?: number | null;
 }
 
 /**

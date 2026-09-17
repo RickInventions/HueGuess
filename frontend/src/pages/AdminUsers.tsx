@@ -207,19 +207,21 @@ export default function AdminUsers() {
                 <th className="text-right px-4 py-3 text-sm font-medium text-muted hidden md:table-cell">HuePoints</th>
                 <th className="text-right px-4 py-3 text-sm font-medium text-muted hidden lg:table-cell">Games</th>
                 <th className="text-right px-4 py-3 text-sm font-medium text-muted hidden xl:table-cell">Joined</th>
+                <th className="text-right px-4 py-3 text-sm font-medium text-muted hidden 2xl:table-cell">Challenge games</th>
+                <th className="text-right px-4 py-3 text-sm font-medium text-muted hidden 2xl:table-cell">Challenge rounds</th>
                 <th className="text-center px-4 py-3 text-sm font-medium text-muted">Actions</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12">
+                  <td colSpan={9} className="text-center py-12">
                     <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : users.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-muted">
+                  <td colSpan={9} className="text-center py-12 text-muted">
                     No users found
                   </td>
                 </tr>
@@ -260,6 +262,12 @@ export default function AdminUsers() {
                       <span className="text-xs text-muted">
                         {format(new Date(user.created_at), 'MMM d, yyyy')}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-right hidden 2xl:table-cell">
+                      <span className="text-muted">{user.total_challenge_games || 0}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right hidden 2xl:table-cell">
+                      <span className="text-muted">{user.total_challenge_rounds || 0}</span>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
@@ -457,6 +465,14 @@ export default function AdminUsers() {
                   <Row label="Rounds recorded" value={String(Number(selectedUser.total_games))} />
                 )}
                 <Row label="Avg accuracy" value={`${Math.round(selectedUser.avg_accuracy || 0)}%`} />
+                <Row
+                  label="Challenge games"
+                  value={String(selectedUser.total_challenge_games || 0)}
+                />
+                <Row
+                  label="Challenge rounds"
+                  value={String(selectedUser.total_challenge_rounds || 0)}
+                />
                 {selectedUser.current_streak != null && (
                   <Row
                     label="Streak"

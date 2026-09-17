@@ -127,6 +127,7 @@ export class AdminService {
     const result = await pool.query(
       `SELECT u.id, u.username, u.email, u.is_verified, u.created_at, u.last_username_change,
               u.banned_at, u.banned_until, u.ban_reason,
+              u.total_challenge_games, u.total_challenge_rounds,
               ${BAN_IS_ACTIVE} AS is_restricted,
               cs.rating, cs.games_played, cs.avg_accuracy
        FROM users u
@@ -153,6 +154,7 @@ export class AdminService {
     const result = await pool.query(
       `SELECT u.id, u.username, u.email, u.is_verified, u.created_at, u.last_username_change,
               u.banned_at, u.banned_until, u.ban_reason, u.banned_by,
+              u.total_challenge_games, u.total_challenge_rounds,
               ${BAN_IS_ACTIVE} AS is_restricted,
               cs.rating, cs.rank_tier, cs.games_played, cs.avg_accuracy,
               cs.current_streak, cs.best_streak,

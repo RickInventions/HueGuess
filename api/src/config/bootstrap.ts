@@ -174,6 +174,23 @@ const MODERATION_COLUMNS = `
 `;
 
 /**
+ * The only challenge-mode data that reaches the database.
+ *
+ * Everything else about a room lives in memory and dies with the process, which
+ * is deliberate: a room is a few seconds of ephemeral state, and persisting it
+ * would put a write on the game loop. These two counters are the exception
+ * because they are the whole of what an admin needs to see, and they are written
+ * once when a player's time in a room ends rather than once a round.
+ *
+ * NOT NULL DEFAULT 0 so the read paths never have to branch on a missing value,
+ * and so every account that predates this feature reads as zero rather than null.
+ */
+const CHALLENGE_STATS_COLUMNS = `
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS total_challenge_games  INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS total_challenge_rounds INTEGER NOT NULL DEFAULT 0;
+`;
+
+/**
  * The audit trail behind every admin write.
  *
  * Created here as well as used: the table predates this file and may exist with
@@ -223,6 +240,13 @@ export async function bootstrapSchema(): Promise<void> {
     console.log('✅ Admin log schema ready');
   } catch (error) {
     console.error('❌ Admin log schema failed:', (error as Error).message);
+  }
+
+  try {
+    await pool.query(CHALLENGE_STATS_COLUMNS);
+    console.log('✅ Challenge stats schema ready');
+  } catch (error) {
+    console.error('❌ Challenge stats schema failed:', (error as Error).message);
   }
 
   // Its own block, and its own userIdType() read, so a failure here cannot take
